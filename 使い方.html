@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>書類印刷の使い方</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #fff; --text: #1f2933; --muted: #5b6672; --line: #d8dde3;
+  --accent: #2563eb; --accent-weak: #e8effd; --warn-bg: #fff3d6; --warn-text: #4a3600; --warn-line: #e0c278;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15191e; --panel: #1e242b; --text: #e6e9ed; --muted: #a3adb8; --line: #36404a;
+    --accent: #7aa7ff; --accent-weak: #22304a; --warn-bg: #3d3216; --warn-text: #f6e3b0; --warn-line: #6b5a2a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15191e; --panel: #1e242b; --text: #e6e9ed; --muted: #a3adb8; --line: #36404a;
+  --accent: #7aa7ff; --accent-weak: #22304a; --warn-bg: #3d3216; --warn-text: #f6e3b0; --warn-line: #6b5a2a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: "BIZ UDPGothic", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
+  font-size: 17px; line-height: 1.8;
+}
+main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 28px; margin: 8px 0 4px; }
+.lead { color: var(--muted); margin: 0 0 20px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px; margin: 18px 0; }
+h2 { font-size: 21px; margin: 0 0 10px; padding-left: 10px; border-left: 5px solid var(--accent); }
+h3 { font-size: 18px; margin: 18px 0 6px; }
+p { margin: 6px 0; }
+ol, ul { margin: 6px 0; padding-left: 1.6em; }
+li { margin: 4px 0; }
+.btn { display: inline-block; padding: 0 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); font-size: 15px; line-height: 1.6; white-space: nowrap; }
+.tab { display: inline-block; padding: 0 8px; border-radius: 5px; background: var(--accent-weak); color: var(--accent); font-size: 15px; line-height: 1.6; font-weight: bold; white-space: nowrap; }
+code { font-family: "BIZ UDGothic", "MS Gothic", monospace; background: var(--accent-weak); padding: 0 4px; border-radius: 4px; }
+.note { background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn-line); border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 16px; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+th { background: var(--accent-weak); white-space: nowrap; }
+.toc { columns: 2; column-gap: 32px; }
+.toc li { break-inside: avoid; }
+a { color: var(--accent); }
+.donate-wrap { text-align: center; margin: 12px 0; }
+.donate-btn { display: inline-block; min-width: 260px; text-align: center; padding: 10px 22px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: bold; text-decoration: none; }
+:root[data-theme="dark"] .donate-btn { color: #15191e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .donate-btn { color: #15191e; } }
+@media print { .donate-btn { border: 1px solid #000; color: #000; background: none; } }
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  section { padding: 14px 14px; }
+  .toc { columns: 1; }
+  table { font-size: 14px; }
+  th, td { padding: 4px 6px; }
+}
+@media print {
+  body { background: #fff; font-size: 12pt; }
+  section { border: none; padding: 0; margin: 14px 0; break-inside: avoid-page; }
+  .toc-wrap { display: none; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>書類印刷の使い方</h1>
+<p class="lead">申請書などの書類（PDF・画像）に、会員名簿（Excel）の氏名や住所を差し込んで印刷するアプリです。インターネットにつながっていなくても使えます。</p>
+
+<section class="toc-wrap">
+<h2>目次</h2>
+<ol class="toc">
+  <li><a href="#need">用意するもの</a></li>
+  <li><a href="#files">入っているファイル</a></li>
+  <li><a href="#try">まず見本で試す</a></li>
+  <li><a href="#roster">名簿の準備</a></li>
+  <li><a href="#make">自分の書類の様式を作る</a></li>
+  <li><a href="#kinds">申請書を免許ごとに分ける</a></li>
+  <li><a href="#print">印刷とずれの調整</a></li>
+  <li><a href="#save">保存と配り方</a></li>
+  <li><a href="#privacy">個人情報について</a></li>
+  <li><a href="#faq">困ったとき</a></li>
+  <li><a href="#donate">寄付について</a></li>
+</ol>
+</section>
+
+<section id="need">
+<h2>1. 用意するもの</h2>
+<ul>
+  <li>Windows のパソコン（Mac でも動きますが、書体が少なくなります）</li>
+  <li>ブラウザ：<b>Microsoft Edge</b> か <b>Google Chrome</b>（どちらも新しいもの）</li>
+  <li>名簿を作るなら Excel（ふりがなを自動で作る式は、Microsoft 365 か Excel 2021 以降で動きます。それより古い Excel では「Excel2019以前用」の名簿を使ってください）</li>
+  <li>プリンター</li>
+</ul>
+<p>インストールはいりません。フォルダごとパソコンにコピーして使います。</p>
+</section>
+
+<section id="files">
+<h2>2. 入っているファイル</h2>
+<table>
+  <tr><th>ファイル・フォルダ</th><th>中身</th></tr>
+  <tr><td><code>書類印刷.html</code></td><td>アプリ本体。ダブルクリックするとブラウザで開きます。</td></tr>
+  <tr><td><code>書類印刷_シンプル版.html</code></td><td>見た目を飾らない版。できることは同じです。</td></tr>
+  <tr><td><code>lib</code> フォルダ</td><td>アプリが使う部品。<b>アプリと同じ場所に置いたまま</b>にしてください（ないと PDF や Excel を開けません）。</td></tr>
+  <tr><td><code>会員名簿_ひな形.xlsx</code></td><td>名簿のひな形。2〜6 行目に架空の記入例が入っています。</td></tr>
+  <tr><td><code>会員名簿_ひな形_Excel2019以前用.xlsx</code></td><td>古い Excel 用の同じひな形。</td></tr>
+  <tr><td><code>見本</code> フォルダ</td><td>練習用の架空の申請書（PDF）と、その様式（<code>狩猟者登録申請書_見本_様式.json</code>・<code>狩猟免許更新申請書_見本_様式.json</code>）。実際の申請には使えません。</td></tr>
+</table>
+<p>「様式」とは、書類の背景（PDF・画像）と、どこに何を印刷するか（欄の配置）をまとめた 1 つのファイル（<code>.json</code>）のことです。</p>
+</section>
+
+<section id="try">
+<h2>3. まず見本で試す</h2>
+<ol>
+  <li><code>書類印刷.html</code> をダブルクリックして開きます。（Edge か Chrome 以外で開いたときは、右クリック →「プログラムから開く」で選びます）</li>
+  <li><span class="btn">様式を開く</span> を押して、<code>見本</code> フォルダの <code>狩猟者登録申請書_見本_様式.json</code> を選びます。申請書と欄が出ます。</li>
+  <li>名簿を開くよう案内が出たら、<code>会員名簿_ひな形.xlsx</code> を選びます。（右側の <span class="btn">名簿を開く</span> からも開けます）</li>
+  <li>左の <span class="tab">印刷</span> タブに名簿の人が並びます。名前を押すと、その人の内容で書類に表示されます。</li>
+  <li>印刷する人にチェックを付けて <span class="btn">選んだ人を印刷</span> を押します。</li>
+</ol>
+<p>ファイルは、アプリの画面へドラッグしても開けます。</p>
+</section>
+
+<section id="roster">
+<h2>4. 名簿の準備</h2>
+<p>ひな形の名簿をコピーして、自分の団体の名簿にします。</p>
+<ol>
+  <li><code>会員名簿_ひな形.xlsx</code> をコピーし、わかりやすい名前に変えます。</li>
+  <li>【各種設定金額】シートで、都道府県と金額を自分の団体に合わせます。ほかのシートに自動で反映されます。</li>
+  <li>【Sheet1】と【狩猟登録会計】の 2〜6 行目にある記入例（架空の人）を消してから、会員を入力します。</li>
+</ol>
+<div class="note">
+<b>【Sheet1】の編集について：</b>【Sheet1】は Excel の「テーブル」になっていて、行の追加・削除・並べ替え・絞り込みが自由にできます。行を足すと、ふりがなや年齢などの式も自動で入ります。式の入った列は書き換えないでください（もし書き換えてしまったら、元に戻す（Ctrl+Z）か、同じ列のほかのセルの式を写してください）。<br><b>ご注意：</b>【狩猟登録会計】の手入力の欄（銃・保険・有害・減免・入会金など）は、【Sheet1】の並べ替えや行の挿入・削除に付いてきません。会計に入力する前に、【Sheet1】の並びを確定させてください。<br>ほかのシートには保護（パスワードなし）が掛かっていて、入力する欄だけ書き換えられます。
+</div>
+<h3>アプリが使う列</h3>
+<p>アプリは【Sheet1】の 1 行目の見出しで列を見分けます。次の見出しの名前は変えないでください。</p>
+<table>
+  <tr><th>見出し</th><th>使い方</th></tr>
+  <tr><td>氏名</td><td>印刷する人の一覧に出る名前。</td></tr>
+  <tr><td>一種登録</td><td>銃猟の登録をする人に印。✔ なら第 1 種、2️⃣ なら第 2 種。</td></tr>
+  <tr><td>わな登録</td><td>わな猟の登録をする人に印（何か入っていれば登録）。</td></tr>
+  <tr><td>網登録</td><td>網猟の登録をする人に印（何か入っていれば登録）。</td></tr>
+</table>
+<p>そのほかの列（住所・生年月日など）は、見出しの名前で書類に差し込めます。自分で列を足しても使えます。</p>
+</section>
+
+<section id="make">
+<h2>5. 自分の書類の様式を作る</h2>
+<p>手元の申請書や名簿用の書類を、様式にします。</p>
+<h3>背景を選ぶ</h3>
+<ol>
+  <li><span class="btn">新しく作る</span> を押し、書類の PDF か画像（スキャンした JPG・PNG など）を選びます。</li>
+  <li>向きが違うときは <span class="tab">背景</span> タブで回します。</li>
+</ol>
+<h3>欄を置く</h3>
+<ul>
+  <li><b>名簿から差し込む欄：</b>名簿を開くと、右側に名簿の列（氏名・住所など）が並びます。これを書類の上の置きたい場所へドラッグします。</li>
+  <li><b>自分で文字を書く欄：</b>左上の <span class="tab">文字</span> を選んで書類をクリックし、<span class="tab">入力</span> タブで文字を入れます。団体名など、全員に共通の文字に使います。</li>
+  <li><b>✓・○：</b><span class="tab">✓</span> や <span class="tab">○</span> を選んで書類をクリックします。名簿の列を指定すると、その列に何か入っている人にだけ印が付きます。</li>
+</ul>
+<h3>位置や文字を整える</h3>
+<ul>
+  <li><span class="tab">選択</span> にして欄をドラッグすると動かせます。矢印キーで少しずつ動かすこともできます。</li>
+  <li><span class="tab">配置</span> タブで、文字の大きさ・書体・文字の間隔・縦書き・回転などを変えられます。複数の欄を選ぶと、揃えたり等間隔に並べたりできます。</li>
+  <li>「差し込み」の欄に <code>{氏名}</code> のように <code>{列の見出し}</code> と書くと、その列の値が入ります。<code>{郵便}-{番号}</code> のように並べることもできます。</li>
+</ul>
+<p>できたら <span class="btn">別の名前で保存</span> で様式として保存します。次からは <span class="btn">様式を開く</span> でそのまま使えます。</p>
+</section>
+
+<section id="kinds">
+<h2>6. 申請書を免許ごとに分ける</h2>
+<p>狩猟者登録申請書のように、免許の種類（第 1 種銃・第 2 種銃・わな・網）ごとに 1 枚ずつ出す書類の場合です。</p>
+<ol>
+  <li>種類ごとに違う欄（「□ わな猟」の印や、わなの免状番号など）を選び、<span class="tab">配置</span> タブの「対象」で「わなの申請書だけ」などを選びます。氏名や住所などの共通の欄は「共通」のままにします。</li>
+  <li><span class="tab">印刷</span> タブの印刷のしかたで「申請書：免許ごとに1枚ずつ（自動）」を選びます。</li>
+  <li>名簿の「一種登録」「わな登録」「網登録」の印に合わせて、1 人に必要な枚数が出ます。</li>
+</ol>
+<p>人ごとに印刷する種類を変えたいときは、名前の右のボタン（銃1・銃2・わな・網）で切り替えます。</p>
+<p>印刷のしかたは様式と一緒に保存されます。保険の書類のように 1 人 1 枚の書類は「ほかの書類用（1人1枚）」のままにします。</p>
+</section>
+
+<section id="print">
+<h2>7. 印刷とずれの調整</h2>
+<ul>
+  <li><b>印刷済みの用紙に印刷するとき：</b>役所でもらった申請書の用紙に文字だけを印刷するときは、<span class="btn">背景なしで印刷</span> を押してから印刷します。</li>
+  <li><b>名簿を使わない書類：</b>名簿を開いていないときは、<span class="tab">印刷</span> タブの <span class="btn">印刷</span> で、表示している内容をそのまま印刷します。</li>
+  <li><b>位置や大きさがずれるとき：</b><span class="btn">印刷の設定</span> で、用紙の大きさ・向き、倍率、右へ・下へ（mm）を調整します。この設定はパソコンごとに覚えます。</li>
+</ul>
+<div class="note">ブラウザの印刷画面では、「倍率」を「100%」（または「実際のサイズ」）、「ヘッダーとフッター」をオフにしてください。</div>
+<p>最初は普通の紙に試し刷りして、本番の用紙と重ねて位置を確かめるのがおすすめです。</p>
+</section>
+
+<section id="save">
+<h2>8. 保存と配り方</h2>
+<ul>
+  <li><span class="btn">保存する</span> は、開いた様式に上書きします。<span class="btn">別の名前で保存</span> は新しいファイルにします。</li>
+  <li>様式のファイルには、背景・欄・手入力の文字と、使う名簿のファイル名が入ります。<b>名簿の中身は入りません。</b></li>
+  <li>ほかの人に様式を渡すときは、様式のファイル（<code>.json</code>）を渡せば背景ごと使えます。ただし、手入力した文字に個人の情報を入れていないか確かめてください。</li>
+  <li>アプリを渡すときは、<code>書類印刷.html</code> と <code>lib</code> フォルダを必ず一緒に渡してください。</li>
+</ul>
+</section>
+
+<section id="privacy">
+<h2>9. 個人情報について</h2>
+<ul>
+  <li>名簿や書類の内容は、使っているパソコンの中だけで扱います。インターネットへ送ることはありません。</li>
+  <li>ブラウザに覚えるのは、名簿のファイルの場所・背景の向き・印刷の設定だけです。名簿の中身は覚えません。</li>
+  <li>名簿のファイルは、団体の決まりに従って大切に保管してください。</li>
+</ul>
+</section>
+
+<section id="faq">
+<h2>10. 困ったとき</h2>
+<h3>PDF や名簿が開けない</h3>
+<p><code>lib</code> フォルダがアプリと同じ場所にあるか確かめてください。アプリだけを別の場所に移すと開けません。</p>
+<h3>名簿を開いても、印刷する人に印が付かない</h3>
+<p>【Sheet1】の見出し「一種登録」「わな登録」「網登録」の名前が変わっていないか、印（✔ など）が入っているかを確かめてください。印のない人は「登録の印なし（印刷されません）」と出ます。</p>
+<h3>差し込んだ欄が空になる</h3>
+<p>欄の「差し込み」に書いた <code>{列の見出し}</code> と、名簿の見出しが同じか確かめてください（空白の違いは気にしなくて大丈夫です）。</p>
+<h3>名前のふりがなが出ない</h3>
+<p>ふりがなは、Excel で氏名を入力したときの読みから作ります。ほかから貼り付けた氏名には読みがないことがあります。そのときは Excel で氏名を入力し直してください。</p>
+<h3>操作を間違えた</h3>
+<p><span class="btn">↶ 戻す</span>（Ctrl+Z）で元に戻せます。</p>
+<h3>提出する前に</h3>
+<p>印刷した書類は、必ず内容を確かめてから提出してください。申請書の様式は、都道府県や年度で変わることがあります。このアプリと見本は、行政の公式のものではありません。</p>
+</section>
+
+<section id="donate">
+<h2>11. 寄付について（任意）</h2>
+<p>このアプリは無料で、寄付がなくてもすべての機能を使えます。役に立ったと感じていただけたら、開発の応援として寄付をいただけると励みになります。</p>
+<p class="donate-wrap"><a class="donate-btn" href="https://donate.stripe.com/28EbJ02339fZ3yPgJx18c00" target="_blank" rel="noopener noreferrer">寄付する</a></p>
+<p>Stripe（決済サービス）の支払いページが開きます。金額は自由に選べ、アカウントの登録は要りません。アプリの「このアプリについて」からも開けます。</p>
+</section>
+</main>
+</body>
+</html>

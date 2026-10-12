@@ -1,0 +1,2922 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>書類印刷（シンプル版）</title>
+<!-- 部品はアプリと一緒に lib/ に置く（オフラインでも動き、外部に通信しない）。ライセンスは各フォルダの LICENSE -->
+<!-- pdf.js 3.11.174（PDF の表示）。ワーカーもページで読み込み、ページの中で動かす（ファイルとして開いたときに別の処理を起動できないことがあるため） -->
+<script src="lib/pdfjs/pdf.min.js"></script>
+<script src="lib/pdfjs/pdf.worker.min.js"></script>
+<!-- SheetJS 0.20.3（Excel の読み込み） -->
+<script src="lib/sheetjs/xlsx.full.min.js"></script>
+<style>
+/* 配色
+   --bg：書類の後ろ（白い書類が浮き出るよう少し濃いめ）／--panel：ツールバー・左右のパネル
+   --field：入力欄の中／--accent：文字・枠の強調色／--accent-strong：塗りつぶしボタン（白い文字をのせる） */
+:root {
+  color-scheme: light;
+  --bg: #cfd4da;
+  --panel: #e6e9ec;
+  --field: #f3f4f6;
+  --hover: #d9dde2;
+  --line: #b4bcc6;
+  --text: #1b232c;
+  --muted: #47525e;
+  --accent: #1a52c2;
+  --accent-strong: #2158c9;
+  --accent-weak: #cfdcf5;
+  --ghost: #2563eb;
+  --merge: #0d7a53;
+  --merge-strong: #0f7d55;
+  --danger: #b83227;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #15181c; --panel: #22262c; --field: #1a1d22; --hover: #2c3138; --line: #414852;
+    --text: #eceff2; --muted: #c3cbd4;
+    --accent: #8cb4ff; --accent-strong: #3566d0; --accent-weak: #263a5e;
+    --merge: #63d6a0; --merge-strong: #1d8058; --danger: #ff8a7a;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif; font-size: 14px;
+  display: flex; flex-direction: column;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ツールバー */
+/* 左（新しく作る・様式を開く）／中央（保存・戻す・やり直す・表示）／右（背景なしで印刷・印刷の設定）の3つに分ける。
+   中央のまとまりは、左と右のまとまりの間で画面の真ん中に置く */
+.toolbar {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px;
+  padding: 8px 12px 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.tb-left, .tb-center, .tb-undo, .tb-right { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+/* 中央のまとまりは「保存｜戻す・やり直す｜表示」。区切り線の左右を少し空ける */
+.tb-undo > .sep { margin: 0 6px; }
+.tb-undo { justify-content: flex-start; }   /* 位置は centerUndo() で画面の真ん中に合わせる */
+/* 真ん中へずらした入れ物の透明な所が、右の表示バーなどに重なっても邪魔しないように（ボタンだけ反応） */
+.tb-undo { pointer-events: none; }
+.tb-undo > * { pointer-events: auto; }
+.tb-right { justify-content: flex-end; }
+/* 戻す・やり直すは同じ幅 */
+#undoBtn, #redoBtn { min-width: 100px; }
+.zoom, .chk { white-space: nowrap; }
+#zoom { width: 84px; }
+@media (max-width: 1560px) {
+  .toolbar { display: flex; flex-wrap: wrap; }
+  .tb-right { justify-content: flex-start; }
+  .tb-left, .tb-right { flex-wrap: wrap; }
+  .tb-undo { flex: 1 1 auto; }
+  .tb-right { flex-basis: 100%; }
+}
+.btn, .tool, .tab {
+  border: 1px solid var(--line); background: var(--field); border-radius: 6px;
+  padding: 6px 12px; cursor: pointer; white-space: nowrap;
+}
+.btn:not(:disabled):hover, .tool:hover { border-color: var(--accent); background: var(--hover); }
+.btn.primary { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+.btn.primary:not(:disabled):hover { background: var(--accent-strong); border-color: var(--accent-strong); filter: brightness(1.1); }
+.btn:disabled { color: var(--muted); background: transparent; border-style: dashed; cursor: default; }
+/* オン／オフを切り替えるボタン（左の丸：オフは白抜き、オンは塗りつぶし。文字は変えないので幅も変わらない） */
+.btn.toggle { display: inline-flex; align-items: center; gap: 7px; }
+.btn.toggle::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; box-sizing: border-box; flex-shrink: 0; }
+.btn.toggle[aria-pressed="true"], .btn.toggle[aria-pressed="true"]:not(:disabled):hover { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+.btn.toggle[aria-pressed="true"]::before { background: #fff; border-color: #fff; }
+.tools { display: flex; padding: 8px 8px 0; }
+.tool { border-radius: 0; margin-left: -1px; flex: 1; }
+.tool:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.tool:last-child { border-radius: 0 6px 6px 0; }
+.tool.active { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); position: relative; }
+.sep { width: 1px; height: 24px; background: var(--line); }
+.grow { flex: 1; }
+.zoom, .chk { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+
+/* 本体 */
+.main { flex: 1; display: flex; min-height: 0; }
+.side {
+  width: 340px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.tabs { display: flex; padding: 8px 8px 0; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab { border-radius: 6px 6px 0 0; border-bottom: none; }
+.tab.active { background: var(--accent-weak); color: var(--accent); border-color: var(--accent); }
+.panel { overflow: auto; padding: 12px; flex: 1; }
+.panel.flex { display: flex; flex-direction: column; gap: 8px; }
+.panel[hidden] { display: none; }
+.hint { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.group-title { font-weight: bold; margin: 14px 0 6px; color: var(--muted); font-size: 12px; }
+.group-title:first-child { margin-top: 0; }
+.row {
+  display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 8px;
+  padding: 4px 6px; border-radius: 6px;
+}
+.row.sel { background: var(--accent-weak); }
+.row label { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.row textarea { resize: none; line-height: 1.4; display: block; }
+.rich {
+  min-height: 30px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--field);
+  white-space: pre-wrap; word-break: break-all; line-height: 1.4; cursor: text;
+}
+.rich:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.rtools { grid-column: 2; display: none; gap: 4px; align-items: center; flex-wrap: wrap; }
+.row:focus-within .rtools, .row.sel .rtools { display: flex; }
+.rtools select, .rtools input { width: auto; padding: 3px 5px; font-size: 12px; }
+.rtools input { width: 64px; }
+.rtools .btn { padding: 2px 8px; font-size: 12px; }
+.row input[type=text], .row input[type=number], .row select, .row textarea, .search, .sheet-select {
+  width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--field);
+}
+.row input[type=checkbox] { width: 18px; height: 18px; justify-self: start; }
+.row .merged { color: var(--merge); border-style: dashed; }
+.row.merged label::before { content: "名簿"; font-size: 10px; color: #fff; background: var(--merge-strong); border-radius: 3px; padding: 1px 4px; margin-right: 4px; }
+.actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.btn.danger { color: var(--danger); }
+.sub { font-size: 12px; color: var(--muted); }
+
+/* 名簿 */
+.people { flex: 1; overflow: auto; border: 1px solid var(--line); border-radius: 6px; min-height: 120px; }
+.person {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; cursor: pointer;
+  border-bottom: 1px solid var(--line);
+}
+.person:last-child { border-bottom: none; }
+.person:hover { background: var(--hover); }
+.person.preview { background: var(--accent-weak); }
+.person input { width: 18px; height: 18px; margin: 0; }
+.person .no { color: var(--muted); width: 2.5em; text-align: right; font-size: 12px; }
+.kchips { margin-left: auto; display: inline-flex; gap: 3px; flex-shrink: 0; }
+.kchip {
+  font-size: 11px; padding: 1px 6px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+}
+.kchip.on { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+.kchip.changed { outline: 2px solid #e67e22; outline-offset: 1px; }
+.row-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.row-btns .btn { padding: 4px 10px; font-size: 13px; }
+
+.viewer { flex: 1; overflow: auto; padding: 24px; --zoom: 100; }
+.preview-bar {
+  max-width: calc(var(--zoom) * 8px); margin: 0 auto 12px; padding: 6px 12px; border-radius: 6px;
+  background: var(--accent-weak); color: var(--accent); font-size: 13px;
+}
+.empty {
+  max-width: 520px; margin: 60px auto; padding: 40px; text-align: center; line-height: 1.8;
+  border: 2px dashed var(--line); border-radius: 12px; color: var(--muted);
+}
+.empty.drag { border-color: var(--accent); color: var(--accent); }
+
+/* 書類ページ */
+.page {
+  position: relative; margin: 0 auto 24px; background: #fff;
+  width: calc(var(--zoom) * 8px); box-shadow: 0 2px 10px rgba(0,0,0,.18);
+  container-type: inline-size;
+}
+.page canvas, .page img { display: block; width: 100%; height: 100%; }
+.layer { position: absolute; inset: 0; }
+.viewer.adding .layer { cursor: crosshair; }
+.field {
+  position: absolute; color: #000; line-height: 1; white-space: pre; cursor: move;
+  user-select: none; touch-action: none;
+}
+.field.vertical { writing-mode: vertical-rl; }
+.field.ghost { color: var(--ghost); opacity: .45; outline: 1px dashed var(--ghost); }
+.field.t-circle { border: calc(var(--u) * 1) solid #000; border-radius: 50%; }
+.field.t-circle.ghost { border-color: var(--ghost); outline: none; }
+.field.selected { outline: 2px solid var(--accent); outline-offset: 1px; opacity: 1; }
+.field.anchor { outline: 3px double #e67e22; }
+/* ドラッグで範囲を選ぶ四角 */
+.marquee { position: fixed; z-index: 50; pointer-events: none; border: 1px dashed var(--accent); background: rgba(37, 99, 235, .12); }
+.field.marquee-hit { outline: 2px dashed var(--accent); outline-offset: 1px; opacity: 1; }
+.align-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 4px 0 10px; }
+.gap-row { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.gap-row input { width: 70px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--field); }
+.align-grid .btn { padding: 6px 8px; white-space: normal; line-height: 1.3; }
+.handle {
+  position: absolute; right: -6px; bottom: -6px; width: 10px; height: 10px;
+  background: var(--accent); border-radius: 2px; cursor: nwse-resize;
+}
+#printArea { display: none; }
+.field.drop-target { outline: 2px solid var(--merge); outline-offset: 1px; opacity: 1; }
+
+/* 名簿の列（ドラッグで配置） */
+.side[hidden] { display: none; }
+.side-right { width: 240px; border-right: none; border-left: 1px solid var(--line); padding: 12px; gap: 8px; }
+.col-head { display: flex; align-items: center; justify-content: center; text-align: center; }
+.col-head .btn { padding: 2px 10px; }
+.chips { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+.chip {
+  display: flex; flex-direction: column; padding: 4px 8px; border-radius: 6px; cursor: grab;
+  border: 1px solid var(--merge); background: var(--field); font-size: 12px; flex-shrink: 0;
+}
+.chip:hover { background: var(--accent-weak); }
+.chip b { color: var(--merge); font-weight: normal; }
+.chip span { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 印刷の調整 */
+.printbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.printbar[hidden] { display: none; }
+/* お知らせの帯 */
+.oldbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 15px;
+  padding: 10px 14px; background: #fff3d6; color: #4a3600; border-bottom: 1px solid #e0c278;
+}
+.oldbar[hidden] { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .oldbar { background: #3d3216; color: #f6e3b0; border-color: #6b5a2a; }
+}
+.printbar select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--field); }
+.printbar input { width: 72px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--field); }
+.btn.changed { border-color: var(--accent); color: var(--accent); }
+.status {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+  background: #1f2933; color: #fff; padding: 8px 16px; border-radius: 6px;
+  opacity: 0; transition: opacity .2s; pointer-events: none;
+}
+.status.show { opacity: .92; }
+
+/* ---------- 見やすさ（高齢の方にも読みやすい大きさ・濃さ） ---------- */
+body { font-size: 15px; }
+.btn, .tool, .tab { padding: 8px 14px; font-size: 15px; }
+.tool { padding: 9px 6px; font-size: 16px; }
+.tab { padding: 8px 16px; font-weight: 600; }
+/* 左右のパネルは中身の文字数に合わせて広がる（広がりすぎないよう上限あり）。
+   説明文は幅を決める元にしない（長い文は折り返す） */
+.side { width: fit-content; min-width: 340px; max-width: 46vw; }
+.side-right { min-width: 220px; max-width: 45vw; }
+.side-right .chips { scrollbar-gutter: stable; }
+.side .hint, .side .sub, .empty { contain: inline-size; }
+/* 左のパネルの幅は「名簿」タブの中身で決める。3つのタブを同じ場所に重ね、
+   名簿タブは隠れていても幅だけは使う。入力・配置タブは幅を決めず、収まらない項目名は折り返す */
+.panels { flex: 1; min-height: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+.panels > .panel { grid-area: 1 / 1; min-height: 0; scrollbar-gutter: stable; }
+#panel-roster[hidden] { display: flex; visibility: hidden; pointer-events: none; }
+#panel-input, #panel-layout, #panel-bg { contain: inline-size; }
+#panel-bg:not([hidden]) { display: flex; flex-direction: column; gap: 10px; }
+#panel-bg > .btn, #panel-bg > .row-btns { align-self: flex-start; }
+.row label { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
+/* 入力欄の側（2列目）も幅を決める元にしない。項目名の長さで幅が決まる */
+#panel-input > .row > :nth-child(n+2), #panel-layout > .row > :nth-child(n+2) { contain: inline-size; }
+.printbar .sub { flex-basis: 100%; }
+.zoom, .chk { color: var(--text); }
+.zoom .btn { padding: 4px 10px; }
+.zoom .zbtn { font-weight: 700; min-width: 34px; }
+#zoomVal { min-width: 64px; }
+/* 操作の説明 */
+.hint { font-size: 16px; line-height: 1.75; color: var(--text); }
+.sub { font-size: 15px; line-height: 1.6; color: var(--text); }
+.group-title { font-size: 14.5px; color: var(--text); }
+.empty { font-size: 17px; color: var(--text); }
+/* 入力欄：項目名の列は、いちばん長い項目名に合わせて全部の行でそろえる */
+#panel-input:not([hidden]), #panel-layout:not([hidden]) {
+  display: grid; grid-template-columns: minmax(110px, max-content) minmax(220px, 1fr);
+  column-gap: 8px; align-content: start;
+}
+#panel-input > *, #panel-layout > * { grid-column: 1 / -1; }
+#panel-input > .row, #panel-layout > .row { grid-template-columns: subgrid; }
+.row { padding: 5px 6px; }
+.row label { font-size: 14.5px; }
+.row input[type=text], .row input[type=number], .row select, .row textarea, .search, .sheet-select, .rich { padding: 7px 9px; font-size: 15px; }
+.row.merged label::before { font-size: 11.5px; padding: 1px 5px; }
+.rtools select, .rtools input, .rtools .btn { font-size: 13.5px; padding: 4px 8px; }
+.row-btns .btn { padding: 6px 12px; font-size: 14px; }
+/* 名簿の一覧 */
+.person { font-size: 15.5px; }
+.person .no { font-size: 13.5px; color: var(--text); }
+.kchips { gap: 5px; }
+.kchip { font-size: 13.5px; padding: 3px 10px; border-radius: 12px; color: var(--text); border-color: var(--muted); font-weight: 600; }
+/* 名簿の列（右のパネル） */
+.chips { gap: 3px; }
+.chip { padding: 3px 10px; line-height: 1.35; }
+.chip b { font-size: 14.5px; font-weight: 600; white-space: nowrap; }
+.chip span { font-size: 14px; color: var(--text); }
+.col-head strong { font-size: 16px; }
+/* 表示中の人 */
+.preview-bar { font-size: 16.5px; font-weight: 600; padding: 10px 16px; border: 1px solid var(--accent); }
+/* お知らせ */
+.status { font-size: 16px; padding: 12px 20px; }
+/* 位置揃え */
+.align-grid .btn { font-size: 14px; }
+.gap-row { font-size: 14px; color: var(--text); }
+/* 印刷の設定 */
+.printbar { font-size: 15px; }
+.printbar input, .printbar select { padding: 6px 8px; }
+/* ツールバーは細めに（ボタンの高さはそのまま、上下の余白だけ詰める） */
+.toolbar { padding: 4px 12px; }
+/* 保存のまとまりと、戻す・やり直すの間をあける */
+.sep.wide { margin: 0 10px; }
+/* 印刷タブはほかのタブより横に広く（文字と高さはほかのタブと同じ） */
+.tab[data-tab="roster"] { padding-left: 26px; padding-right: 26px; }
+/* タブは少し低めに */
+.tab { padding-top: 5px; padding-bottom: 5px; }
+
+@media (max-width: 760px) {
+  .main { flex-direction: column; }
+  .side { width: auto; max-height: 45vh; border-right: none; border-bottom: 1px solid var(--line); }
+  .side-right { order: -1; max-height: 30vh; border-left: none; }
+  .viewer { padding: 12px 16px; }
+  .page, .preview-bar { width: 100%; max-width: none; }
+}
+
+/* 「背景なしで印刷」のときは、画面でも背景を出さない（印刷される見た目と同じにする） */
+body.nobg .page canvas, body.nobg .page img { visibility: hidden; }
+
+/* ---- 見やすさの調整 ---- */
+/* 「このアプリについて」の窓 */
+#aboutDlg { width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 20px 26px 16px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel); color: var(--text); font-size: 16px; line-height: 1.65; }
+#aboutDlg::backdrop { background: rgba(0, 0, 0, .45); }
+#aboutDlg h2 { margin: 0 0 2px; font-size: 21px; outline: none; }
+#aboutDlg h3 { margin: 12px 0 2px; font-size: 17px; border-left: 4px solid var(--accent-strong); padding-left: 8px; }
+#aboutDlg p, #aboutDlg ul { margin: 4px 0; }
+#aboutDlg ul { padding-left: 1.4em; }
+#aboutDlg .about-name { color: var(--muted); }
+#aboutDlg .about-small { font-size: 14px; color: var(--muted); }
+#aboutDlg .about-btns { display: flex; justify-content: flex-end; margin-top: 14px; }
+#aboutDlg a { color: var(--accent); }
+#aboutDlg a.btn { display: inline-block; color: #fff; text-decoration: none; padding: 7px 18px; min-width: 240px; text-align: center; }
+#aboutDlg .about-donate { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 10px; text-align: center; }
+/* 選んだ道具・タブは青で塗りつぶし、タブの下の線も同じ青にしてパネルとつなげる */
+.tool.active, .tab.active { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+.tabs { border-bottom: 3px solid var(--accent-strong); }
+/* 右の項目：左の線だけ太く */
+.chip { border-left-width: 2px; }
+/* 左のパネル：名前は省かず、「全員を選択」などのボタンは1行に。ファイル名と選択欄は幅を決める元にしない */
+.person > * { flex-shrink: 0; }
+.person > .no + span { white-space: nowrap; }
+#panel-roster > .row-btns { flex-wrap: nowrap; }
+#panel-roster > select { contain: inline-size; }
+#panel-roster > .sub:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 右のパネル：アプリは名簿のいちばん長い値に合わせて幅を決める（style 属性）が、220px に固定して、はみ出た文字は … で省く */
+.side-right { box-sizing: border-box; width: 220px !important; min-width: 0; }
+.chip { overflow: hidden; }
+.chip b, .chip span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 名簿のファイル名は1行で、はみ出た分を … で省き、人数（◯人）は必ず残す */
+.col-file { display: flex; min-width: 0; white-space: nowrap; }
+.col-file-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.col-file-count { flex-shrink: 0; }
+/* 「名簿どおりに戻す」：押せるとき（手で切り替えた人がいるとき）は、切り替えた印と同じオレンジにする。
+   太字や太い枠にするとボタンの幅が変わり、パネルの幅も動くので、色と内側の線だけで目立たせる */
+#panel-roster > .row-btns > .btn:last-child:not(:disabled) {
+  border: 1px solid #e67e22; box-shadow: inset 0 0 0 1px #e67e22; color: #a8510b; background: #fdf0e3;
+}
+#panel-roster > .row-btns > .btn:last-child:not(:disabled):hover { background: #fae0c6; border-color: #e67e22; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) #panel-roster > .row-btns > .btn:last-child:not(:disabled) { color: #f5b77a; background: #3a2a1c; }
+  :root:not([data-theme="light"]) #panel-roster > .row-btns > .btn:last-child:not(:disabled):hover { background: #4a3523; }
+}
+/* マウスを乗せたとき：色と内側の線で目立たせる（枠の太さ・余白は変えないので、大きさは変わらない） */
+.btn:not(:disabled):not(.primary):hover { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tool:not(.active):hover, .tab:not(.active):hover { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tool.active:hover, .tab.active:hover { filter: brightness(1.1); }
+.person:not(.preview):hover { background: var(--accent-weak); box-shadow: inset 0 0 0 2px var(--accent); }
+.kchip:hover { box-shadow: 0 0 0 2px var(--accent); }
+.chip:hover { box-shadow: inset 0 0 0 1px var(--merge); }
+#zoom { border-radius: 999px; cursor: pointer; }
+#zoom:hover { background: var(--accent-weak); outline: 2px solid var(--accent); outline-offset: 2px; }
+.row input[type=text]:hover, .row input[type=number]:hover, .row select:hover, .row textarea:hover, .search:hover, .sheet-select:hover, .rich:hover,
+.printbar input:hover, .printbar select:hover, .gap-row input:hover { border-color: var(--accent); }
+
+@media print {
+  /* 用紙サイズとページの幅は #pageStyle で設定 */
+  body { background: #fff; display: block; }
+  .toolbar, .printbar, .oldbar, .side, .status, .empty, .preview-bar { display: none !important; }
+  .main, .viewer { display: block; padding: 0; overflow: visible; }
+  .page { margin: 0; box-shadow: none; break-after: page; overflow: hidden; }
+  /* 印刷の調整（倍率は用紙の中心から、ずれは mm で） */
+  .page > canvas, .page > img, .page > .layer {
+    transform: translate(var(--pdx, 0mm), var(--pdy, 0mm)) scale(var(--ps, 1));
+    transform-origin: 50% 50%;
+  }
+  .page:last-child { break-after: auto; }
+  .field.ghost { display: none; }
+  .field.selected { outline: none; }
+  .handle { display: none; }
+  body.merge .main { display: none; }
+  body.merge #printArea { display: block; }
+}
+</style>
+</head>
+<body>
+<header class="toolbar">
+  <!-- 左：新しく作る・様式を開く／中央：戻す・やり直す・表示・保存／右：印刷 -->
+  <div class="tb-left">
+    <button class="btn" id="newSet" title="背景と欄をなくして、新しい様式を最初から作る">新しく作る</button>
+    <button class="btn primary" id="loadTpl" title="様式を開く（背景・欄・手入力の文字が入ります）">様式を開く</button>
+    <input type="file" id="tplInput" accept=".json,application/json" hidden>
+  </div>
+  <!-- 中央：保存／戻す・やり直す／表示の倍率（ファイル → 編集 → 表示の順。まとめて画面の真ん中に置く） -->
+  <div class="tb-undo">
+    <span class="tb-center">
+      <button class="btn" id="saveOver" title="まだ保存先がないので、別の名前で保存します">保存する</button>
+      <button class="btn" id="saveAs" title="様式として保存（背景・欄・手入力の文字・使う名簿の名前。名簿の中身は入りません）">別の名前で保存</button>
+    </span>
+    <span class="sep"></span>
+    <button class="btn" id="undoBtn" title="元に戻す（Ctrl+Z）" disabled>↶ 戻す</button>
+    <button class="btn" id="redoBtn" title="やり直す（Ctrl+Y）" disabled>↷ やり直す</button>
+    <span class="sep"></span>
+    <span class="zoom">表示
+      <button class="btn zbtn" id="zoomOut" title="5%小さく">－</button>
+      <input type="range" id="zoom" min="50" max="300" step="5" value="100" aria-label="表示の倍率">
+      <button class="btn zbtn" id="zoomIn" title="5%大きく">＋</button>
+      <button class="btn" id="zoomVal" title="押すと100%に戻します">100%</button>
+    </span>
+  </div>
+  <div class="tb-right">
+    <input type="file" id="rosterInput" accept=".xlsx,.xlsm,.xls" hidden>
+    <input type="file" id="pdfInput" accept="application/pdf,image/*" multiple hidden>
+    <!-- 押すたびに オン／オフ が切り替わるボタン（状態は隠したチェックボックスに持たせる） -->
+    <button class="btn toggle" id="noBgBtn" aria-pressed="false" title="押すと、背景を出さずに文字だけを印刷します（もう一度押すと元に戻ります）">背景なしで印刷</button>
+    <input type="checkbox" id="noBg" hidden>
+    <button class="btn" id="printAdjBtn" title="用紙・大きさ・位置の調整">印刷の設定</button>
+    <button class="btn" id="aboutBtn" title="個人情報の扱い・ご注意・寄付・使っている部品">このアプリについて</button>
+  </div>
+</header>
+<!-- 「このアプリについて」の窓 -->
+<dialog id="aboutDlg" aria-labelledby="aboutTitle">
+  <h2 id="aboutTitle" tabindex="-1" autofocus>このアプリについて</h2>
+  <p class="about-name">書類印刷（汎用版）　版 0.1（2026年10月）</p>
+  <h3>できること</h3>
+  <p>書類の PDF や画像を背景にして、名簿（Excel）の内容を差し込んで印刷します。くわしい使い方は、アプリと同じ場所の <a href="使い方.html" target="_blank">使い方.html</a> をご覧ください。</p>
+  <h3>個人情報について</h3>
+  <p>名簿や書類の内容は、このパソコンの中だけで扱います。<b>インターネットへ送ることはありません。</b>アプリに必要な部品も、アプリと一緒に入っています。</p>
+  <p>保存した様式ファイルには、背景・欄・手入力の文字・名簿のファイル名が入ります。<b>名簿の中身は入りません。</b></p>
+  <p>このブラウザに覚えるのは、名簿のファイルの場所（次に開きやすくするため）、背景の向き、印刷の設定だけです。名簿の中身は覚えません。</p>
+  <h3>ご注意</h3>
+  <ul>
+    <li>印刷した書類は、提出する前に必ずご自身で内容を確かめてください。</li>
+    <li>このアプリと見本の様式は、行政の公式のものではありません。申請書の様式は、都道府県や年度によって変わることがあります。</li>
+    <li>このアプリを使ったことで生じた損害について、作成者は責任を負いかねます。</li>
+  </ul>
+  <h3>寄付について（任意）</h3>
+  <p>このアプリは無料でお使いいただけます。<b>寄付がなくても、すべての機能を使えます。</b>開発を応援していただける場合は、下のボタンから寄付できます（金額はご自由に選べます）。</p>
+  <p class="about-donate"><a class="btn primary" href="https://donate.stripe.com/28EbJ02339fZ3yPgJx18c00" target="_blank" rel="noopener noreferrer">寄付する</a><span class="about-small">ブラウザで Stripe（決済サービス）の支払いページが開きます。アカウントの登録は要りません。名簿などのデータは送りません。</span></p>
+  <h3>使っている部品</h3>
+  <ul class="about-libs">
+    <li>pdf.js 3.11.174（Mozilla）— Apache License 2.0</li>
+    <li>SheetJS Community Edition 0.20.3（SheetJS LLC）— Apache License 2.0</li>
+  </ul>
+  <p class="about-small">ライセンスの全文は、アプリと同じ場所の lib フォルダにある LICENSE をご覧ください。</p>
+  <div class="about-btns"><button class="btn primary" id="aboutClose">閉じる</button></div>
+</dialog>
+<div class="oldbar" id="noticeBar" hidden>
+  <span id="noticeMsg"></span>
+  <span class="row-btns" id="noticeBtns"></span>
+</div>
+<div class="printbar" id="printBar" hidden>
+  <strong>印刷の設定</strong>
+  <label>用紙 <select id="pPaper">
+    <option value="auto">自動（PDFと同じ大きさ）</option>
+    <option value="A3">A3</option>
+    <option value="A4">A4</option>
+    <option value="A5">A5</option>
+    <option value="B4">B4</option>
+    <option value="B5">B5</option>
+    <option value="letter">レター</option>
+    <option value="hagaki">はがき</option>
+  </select></label>
+  <label>向き <select id="pOrient">
+    <option value="portrait">縦</option>
+    <option value="landscape">横</option>
+  </select></label>
+  <label>倍率 <input type="number" id="pScale" min="50" max="150" step="0.5"> %</label>
+  <label>右へ <input type="number" id="pDx" min="-50" max="50" step="0.5"> mm</label>
+  <label>下へ <input type="number" id="pDy" min="-50" max="50" step="0.5"> mm</label>
+  <button class="btn" id="pReset">初期値に戻す</button>
+  <span class="sub">プリンターで大きさや位置がずれるときに使います。マイナスにすると左・上へ動きます。倍率は用紙の中心を基準に変わります。</span>
+</div>
+
+<div class="main">
+  <aside class="side">
+    <div class="tools" role="group" aria-label="道具">
+      <button class="tool active" data-tool="select" title="項目を選んで動かす">選択</button>
+      <button class="tool" data-tool="text" title="クリックした場所に文字欄を追加">文字</button>
+      <button class="tool" data-tool="check" title="クリックした場所にチェックを追加">✓</button>
+      <button class="tool" data-tool="circle" title="クリックした場所に丸を追加">○</button>
+    </div>
+    <div class="tabs">
+      <button class="tab" data-tab="roster" title="表示する人・印刷する人を選んで、印刷する">印刷</button>
+      <button class="tab" data-tab="bg" title="背景（PDF・画像）の変更と回転">背景</button>
+      <button class="tab active" data-tab="input">入力</button>
+      <button class="tab" data-tab="layout">配置</button>
+    </div>
+    <div class="panels">
+      <div class="panel" id="panel-input"></div>
+      <div class="panel flex" id="panel-roster" hidden></div>
+      <div class="panel" id="panel-layout" hidden></div>
+      <div class="panel" id="panel-bg" hidden></div>
+    </div>
+  </aside>
+  <section class="viewer" id="viewer">
+    <div class="empty" id="empty">
+      <strong>「様式を開く」か「新しく作る」から始めてください</strong><br>
+      様式を開くと、背景と欄がそろって出ます。<br>
+      新しく作るときは、「新しく作る」を押して、書類のPDFか画像（JPG・PNGなど）を選びます。<br>
+      ここに様式・PDF・画像・名簿のExcelをドラッグしても開けます。
+    </div>
+  </section>
+  <aside class="side side-right" id="colPanel"></aside>
+</div>
+<div id="printArea"></div>
+<div class="status" id="status"></div>
+
+<script>
+const PDFJS = 'lib/pdfjs/';
+pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
+
+const $ = (s) => document.querySelector(s);
+const viewer = $('#viewer');
+const emptyEl = $('#empty');   // 背景がないときの案内（背景を開くと画面から外れる）
+const panelInput = $('#panel-input');
+const panelRoster = $('#panel-roster');
+const panelLayout = $('#panel-layout');
+const panelBg = $('#panel-bg');
+
+let state = { fileName: '', fields: [], bg: null, rosterRef: null };
+let pages = [];          // { wrap, layer, canvas, ratio, u }
+let selectedId = null;
+let selection = [];      // 選択中の項目（先頭が位置揃えの基準）。selectedId は最後に選んだ項目
+let tool = 'select';
+let seq = 1;
+
+// 名簿はこのページの中だけで扱い、保存しない
+let roster = null;       // { workbook, sheetName, headers, rows, selected:Set, preview:number|null, filter }
+
+const uid = () => 'f' + Date.now().toString(36) + (seq++);
+const byId = (id) => state.fields.find((f) => f.id === id);
+
+/* ---------- 変更の記録 ---------- */
+// 配置はブラウザには保存しない。PDFを開くと毎回まっさらで、「配置を読込」で配置する。
+// 保存していない変更があるときは、PDFを開き直す前や画面を閉じる前に知らせる（dirty）
+let dirty = false;
+// 変更のたびに呼ぶ。元に戻す用の履歴も記録する
+// tag が同じ変更（同じ欄への文字入力など）が続いたときは、1回分にまとめる
+// 履歴の1回分：PDFの回転と項目
+const snapOf = () => JSON.stringify({ r: state.rotate || 0, f: state.fields });
+function autosave(tag) {
+  const snap = snapOf();
+  if (snap !== hist.last) {
+    const now = Date.now();
+    const merge = tag && tag === hist.tag && now - hist.time < 1500 && hist.undo.length;
+    if (!merge) {
+      hist.undo.push(hist.last);
+      if (hist.undo.length > 100) hist.undo.shift();
+    }
+    hist.last = snap; hist.tag = tag || null; hist.time = now; hist.redo = [];
+    updateUndoButtons();
+    dirty = true;
+  }
+}
+window.addEventListener('beforeunload', (e) => {
+  if (dirty && state.fields.length) { e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ---------- 元に戻す・やり直す ---------- */
+const hist = { undo: [], redo: [], last: '', tag: null, time: 0 };
+
+function resetHistory() {
+  hist.undo = []; hist.redo = []; hist.last = snapOf(); hist.tag = null;
+  updateUndoButtons();
+}
+
+async function restore(snap) {
+  const d = JSON.parse(snap);
+  state.fields = d.f;
+  hist.last = snap; hist.tag = null;
+  selection = selection.filter((id) => byId(id));
+  if (!selection.includes(selectedId)) selectedId = selection[selection.length - 1] || null;
+  updateUndoButtons();
+  dirty = true;
+  if ((d.r || 0) !== (state.rotate || 0)) {   // PDFの回転も戻す
+    state.rotate = d.r || 0;
+    saveRotate();
+    await renderPages();
+    updatePageStyle();
+  }
+  renderAll();
+}
+
+function undo() {
+  if (!hist.undo.length) { toast('これ以上戻せません'); return; }
+  hist.redo.push(hist.last);
+  return restore(hist.undo.pop());
+}
+
+function redo() {
+  if (!hist.redo.length) return;
+  hist.undo.push(hist.last);
+  return restore(hist.redo.pop());
+}
+
+function updateUndoButtons() {
+  $('#undoBtn').disabled = !hist.undo.length;
+  $('#redoBtn').disabled = !hist.redo.length;
+}
+
+function toast(msg) {
+  const s = $('#status');
+  s.textContent = msg; s.classList.add('show');
+  clearTimeout(toast.t); toast.t = setTimeout(() => s.classList.remove('show'), 2600);
+}
+
+/* ---------- 様式の欄の既定値 ---------- */
+// 開いた様式の欄で、まだ決まっていない設定に既定値を入れる
+function fillFieldDefaults(fields) {
+  for (const f of fields) {
+    if (!('src' in f)) f.src = '';
+    if (!('kind' in f)) f.kind = '';
+    if (!('bold' in f)) f.bold = true;          // 太字が標準
+    if (!('lineHeight' in f)) f.lineHeight = 1.2;
+    f.rotTL = true;   // 回転は左上が軸（前の版で開いても位置がずれないように付けておく）
+  }
+  return fields;
+}
+
+/* ---------- 免許の種類（申請書は種類ごとに1枚） ---------- */
+// 名簿の「一種登録」列：✔なら第1種、2（2️⃣など）なら第2種。「わな登録」「網登録」列：何か入っていれば登録
+const KINDS = {
+  gun1: { name: '第1種銃', short: '銃1' },
+  gun2: { name: '第2種銃', short: '銃2' },
+  trap: { name: 'わな', short: 'わな' },
+  net: { name: '網', short: '網' },
+};
+let printKind = 'each';   // each：1人1枚／auto：登録している免許ごとに1枚ずつ／gun1／gun2／trap／net（様式に保存する）
+const PRINT_KINDS = ['each', 'auto', 'gun1', 'gun2', 'trap', 'net'];
+const kindOf = (data) => PRINT_KINDS.includes(data.printKind) ? data.printKind : 'each';
+
+// その人の申請書の種類。名簿タブで手で切り替えていればそちら（画面を閉じると消える）
+function kindsFor(person) {
+  const o = roster && roster.override && roster.override.get(person);
+  if (o) return Object.keys(KINDS).filter((k) => o.has(k));
+  return rosterKinds(person);
+}
+
+// 名簿の登録欄から決まる種類
+function rosterKinds(person) {
+  const kinds = [];
+  const gun = norm(evalSrc('{一種登録}', person));
+  if (gun) kinds.push(gun.includes('2') ? 'gun2' : 'gun1');
+  if (evalSrc('{わな登録}', person) !== '') kinds.push('trap');
+  if (evalSrc('{網登録}', person) !== '') kinds.push('net');   // 網の列がない名簿では、いつも空
+  return kinds;
+}
+
+// 項目の対象（f.kind）が、印刷する書類の種類（kind）に入るか
+// kind が配列のときは、その人が登録している免許のどれかに当てはまれば入る
+function kindMatches(fieldKind, kind) {
+  if (!fieldKind || kind == null) return true;
+  if (Array.isArray(kind)) return kind.some((k) => kindMatches(fieldKind, k));
+  if (fieldKind === 'gun') return kind === 'gun1' || kind === 'gun2';
+  return fieldKind === kind;
+}
+
+// each：登録に関係なく、選んだ人を1人1枚（申請書以外の書類用）。
+// 対象を決めた項目は、その人の登録（第1種・第2種・わな）に合うものだけ入る
+function jobsFor(person) {
+  if (printKind === 'each') return [kindsFor(person)];
+  return printKind === 'auto' ? kindsFor(person) : [printKind];
+}
+
+function previewKind() {
+  const p = previewPerson();
+  if (printKind === 'each') return p ? kindsFor(p) : null;
+  if (printKind !== 'auto') return printKind;
+  return p ? (kindsFor(p)[0] || null) : null;
+}
+
+/* ---------- 名簿（差し込み） ---------- */
+// 列名の比較用：空白を除き、全角数字を半角に
+const norm = (s) => String(s ?? '').replace(/[\s　]/g, '')
+  .replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xFEE0));
+
+function colIndex(name) {
+  if (!roster) return -1;
+  const n = norm(name);
+  const i = roster.headers.findIndex((h) => norm(h) === n);
+  // 見出しにふりがなが付いて読み込まれた場合（例：職業ショクギョウ）の予備
+  return i >= 0 ? i : roster.headers.findIndex((h) => norm(h).startsWith(n));
+}
+
+function evalSrc(src, person) {
+  return src.replace(/\{([^}]+)\}/g, (_, k) => {
+    const i = colIndex(k);
+    return i < 0 ? '' : String(person[i] ?? '').trim();
+  });
+}
+
+function previewPerson() {
+  return roster && roster.preview != null ? roster.rows[roster.preview] : null;
+}
+
+// person を渡すと名簿の値、なければ手入力の値。kind が違う項目は空
+function fieldValue(f, person, kind) {
+  if (!kindMatches(f.kind, kind)) return f.type === 'text' ? '' : false;
+  if (f.src && person) {
+    const v = evalSrc(f.src, person);
+    return f.type === 'text' ? v : v !== '';
+  }
+  return f.value;
+}
+
+function findHeaderRow(aoa) {
+  for (let r = 0; r < Math.min(10, aoa.length); r++) {
+    if (aoa[r].some((c) => norm(c) === '氏名')) return r;
+  }
+  return -1;
+}
+
+function pickSheet(wb) {
+  // 「氏名」の見出しがあり、列がいちばん多いシートを選ぶ
+  let best = null, bestCols = -1;
+  for (const name of wb.SheetNames) {
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: false });
+    const r = findHeaderRow(aoa);
+    if (r >= 0 && aoa[r].length > bestCols) { best = name; bestCols = aoa[r].length; }
+  }
+  return best || wb.SheetNames[0];
+}
+
+/* ---------- 日付をExcelの表示どおりに ---------- */
+// 名簿の読み込み部品は日付を「2/8/66」のような米国式にしてしまうので、
+// セルの表示形式をExcelファイルから直接読み、和暦（S41.2.8 など）も含めて同じ形にする
+
+// 日本語版Excelの組み込みの日付書式
+const BUILTIN_DATE_FMT = {
+  14: 'yyyy/m/d', 22: 'yyyy/m/d h:mm',
+  27: '[$-411]ge.m.d', 28: '[$-411]ggge"年"m"月"d"日"', 29: '[$-411]ggge"年"m"月"d"日"',
+  30: 'm/d/yy', 31: 'yyyy"年"m"月"d"日"', 34: 'yyyy"年"m"月"', 35: 'm"月"d"日"', 36: '[$-411]ge.m.d',
+  50: '[$-411]ge.m.d', 51: '[$-411]ggge"年"m"月"', 52: 'yyyy"年"m"月"', 53: 'm"月"d"日"',
+  54: '[$-411]ggge"年"m"月"d"日"', 55: 'yyyy"年"m"月"', 56: 'm"月"d"日"', 57: '[$-411]ge.m.d', 58: '[$-411]ggge"年"m"月"d"日"',
+};
+
+// Excelファイルの中から、シートのセルごとの表示形式（日付のものだけ）を取り出す
+function readDateFormats(buf, sheetName) {
+  const out = new Map();
+  try {
+    const cfb = XLSX.CFB.read(new Uint8Array(buf), { type: 'array' });
+    const text = (p) => {
+      const f = XLSX.CFB.find(cfb, p) || XLSX.CFB.find(cfb, '/' + p);
+      return f ? new TextDecoder().decode(f.content) : '';
+    };
+    const xml = (p) => new DOMParser().parseFromString(text(p), 'application/xml');
+    // 表示形式の一覧
+    const st = xml('xl/styles.xml');
+    const custom = {};
+    for (const n of st.getElementsByTagName('numFmt')) custom[n.getAttribute('numFmtId')] = n.getAttribute('formatCode');
+    const xfs = st.getElementsByTagName('cellXfs')[0];
+    const xfFmt = xfs ? [...xfs.getElementsByTagName('xf')].map((x) => x.getAttribute('numFmtId') || '0') : [];
+    // シートのファイルを探す
+    const wbx = xml('xl/workbook.xml');
+    const sheet = [...wbx.getElementsByTagName('sheet')].find((s) => s.getAttribute('name') === sheetName);
+    if (!sheet) return out;
+    const rid = sheet.getAttribute('r:id') || sheet.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
+    const rel = [...xml('xl/_rels/workbook.xml.rels').getElementsByTagName('Relationship')].find((r) => r.getAttribute('Id') === rid);
+    if (!rel) return out;
+    const target = rel.getAttribute('Target').replace(/^\/?xl\//, '').replace(/^\//, '');
+    // セルの r（番地）と s（書式番号）
+    const sx = text('xl/' + target);
+    for (const m of sx.matchAll(/<c\b([^>]*)>/g)) {
+      const r = /\br="([A-Z]+\d+)"/.exec(m[1]), s = /\bs="(\d+)"/.exec(m[1]);
+      if (!r || !s) continue;
+      const id = xfFmt[+s[1]];
+      const code = custom[id] || BUILTIN_DATE_FMT[id];
+      if (code && isDateFormat(code)) out.set(r[1], code);
+    }
+  } catch (e) { /* 読めないときは今までどおりの表示 */ }
+  return out;
+}
+
+function isDateFormat(code) {
+  const c = code.replace(/"[^"]*"/g, '').replace(/\\./g, '').replace(/\[[^\]]*\]/g, '');
+  return !/^general$/i.test(c.trim()) && /[ymdge]/i.test(c);
+}
+
+// 和暦（Excelと同じ区切り。明治は Excel の扱いに合わせ 1868年から）
+const ERAS = [
+  { start: Date.UTC(2019, 4, 1), y: 2018, g: 'R', gg: '令', ggg: '令和' },
+  { start: Date.UTC(1989, 0, 8), y: 1988, g: 'H', gg: '平', ggg: '平成' },
+  { start: Date.UTC(1926, 11, 25), y: 1925, g: 'S', gg: '昭', ggg: '昭和' },
+  { start: Date.UTC(1912, 6, 30), y: 1911, g: 'T', gg: '大', ggg: '大正' },
+  { start: Date.UTC(1868, 0, 1), y: 1867, g: 'M', gg: '明', ggg: '明治' },
+];
+
+// Excelの日付の数値（シリアル値）を、表示形式どおりの文字にする
+function formatExcelDate(serial, code) {
+  const ms = Math.round((serial - 25569) * 86400000);   // 1970/1/1 = 25569
+  const d = new Date(ms);
+  const Y = d.getUTCFullYear(), M = d.getUTCMonth() + 1, D = d.getUTCDate();
+  const h = d.getUTCHours(), mi = d.getUTCMinutes(), s = d.getUTCSeconds();
+  const era = ERAS.find((e) => ms >= e.start) || ERAS[ERAS.length - 1];
+  const pad = (n) => String(n).padStart(2, '0');
+  const W = ['日', '月', '火', '水', '木', '金', '土'][d.getUTCDay()];
+  const fmt = code.split(';')[0];
+  let out = '', i = 0, afterHour = false;
+  while (i < fmt.length) {
+    const rest = fmt.slice(i);
+    let m;
+    if (rest[0] === '"') { const j = fmt.indexOf('"', i + 1); out += fmt.slice(i + 1, j < 0 ? undefined : j); i = j < 0 ? fmt.length : j + 1; continue; }
+    if (rest[0] === '\\') { out += rest[1] || ''; i += 2; continue; }
+    if (rest[0] === '[') { i = fmt.indexOf(']', i) + 1 || fmt.length; continue; }
+    if ((m = /^(g{1,3}|e{1,2}|y{3,4}|y{1,2}|m{1,5}|d{1,4}|a{3,4}|h{1,2}|s{1,2})/i.exec(rest))) {
+      const t = m[1].toLowerCase();
+      if (t[0] === 'g') out += t.length === 1 ? era.g : t.length === 2 ? era.gg : era.ggg;
+      else if (t[0] === 'e') out += t.length === 2 ? pad(Y - era.y) : Y - era.y;
+      else if (t[0] === 'y') out += t.length >= 3 ? Y : pad(Y % 100);
+      else if (t[0] === 'm') {
+        const minute = afterHour || /^m{1,2}\W*s/i.test(rest);
+        out += minute ? (t.length === 2 ? pad(mi) : mi) : (t.length === 2 ? pad(M) : t.length >= 3 ? M + '月' : M);
+      }
+      else if (t[0] === 'd') out += t.length === 2 ? pad(D) : t.length >= 3 ? W : D;
+      else if (t[0] === 'a') out += t.length === 3 ? W : W + '曜日';
+      else if (t[0] === 'h') out += t.length === 2 ? pad(h) : h;
+      else if (t[0] === 's') out += t.length === 2 ? pad(s) : s;
+      afterHour = t[0] === 'h' ? true : t[0] === 'm' ? false : afterHour;
+      i += m[1].length;
+      continue;
+    }
+    out += rest[0];
+    i++;
+  }
+  return out;
+}
+
+// 今日の日付（Excelのシリアル値）
+function todaySerial() {
+  const n = new Date();
+  return Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()) / 86400000 + 25569;
+}
+
+// 今日の日付を使う式は、ファイルに残っている値（最後に保存した日）ではなく、
+// Excelと同じく開いた日で計算し直す。対応する式：TODAY() / YEAR・MONTH・DAY(TODAY()) / TEXT(セル,"書式")
+function evalTodayFormula(ws, cell) {
+  const f = (cell.f || '').replace(/\s/g, '');
+  if (!f) return null;
+  const t = todaySerial();
+  if (/^TODAY\(\)$/i.test(f)) return { serial: t };
+  let m;
+  if ((m = /^(YEAR|MONTH|DAY)\(TODAY\(\)\)$/i.exec(f))) {
+    const d = new Date((t - 25569) * 86400000);
+    return { text: String({ YEAR: d.getUTCFullYear(), MONTH: d.getUTCMonth() + 1, DAY: d.getUTCDate() }[m[1].toUpperCase()]) };
+  }
+  if ((m = /^TEXT\(\$?([A-Z]+)\$?(\d+),"([^"]*)"\)$/i.exec(f))) {
+    const ref = ws[m[1].toUpperCase() + m[2]];
+    if (!ref) return null;
+    const inner = evalTodayFormula(ws, ref);
+    const v = inner && inner.serial != null ? inner.serial : ref.t === 'n' ? ref.v : null;
+    return v == null ? null : { text: formatExcelDate(v, m[3]) };
+  }
+  return null;
+}
+
+// シートを2次元の文字の表にする（日付はExcelの表示どおり）
+function sheetToRows(name) {
+  const ws = roster.workbook.Sheets[name];
+  if (!ws || !ws['!ref']) return [];
+  const fmts = roster.buf ? readDateFormats(roster.buf, name) : new Map();
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const rows = [];
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    const row = [];
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[addr];
+      if (!cell) { row.push(''); continue; }
+      const code = fmts.get(addr);
+      const today = evalTodayFormula(ws, cell);
+      if (today && today.text != null) row.push(today.text);
+      else if (today && today.serial != null) row.push(formatExcelDate(today.serial, code || 'yyyy/m/d'));
+      else if (code && cell.t === 'n') row.push(formatExcelDate(cell.v, code));
+      else row.push(cell.w != null ? cell.w : cell.v != null ? String(cell.v) : '');
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function useSheet(name) {
+  const aoa = sheetToRows(name);
+  const hr = Math.max(0, findHeaderRow(aoa));
+  roster.sheetName = name;
+  roster.headers = (aoa[hr] || []).map((h) => String(h).trim());
+  const nameCol = roster.headers.findIndex((h) => norm(h) === '氏名');
+  roster.rows = aoa.slice(hr + 1).filter((r) => nameCol >= 0 ? String(r[nameCol]).trim() !== '' : r.some((c) => c !== ''));
+  roster.nameCol = nameCol;
+  roster.noCol = roster.headers.findIndex((h) => /^No\.?$/i.test(norm(h)));
+  roster.selected = new Set();
+  roster.override = new Map();   // 人ごとに手で切り替えた申請書の種類（保存しない）
+  roster.colWidth = null;        // 右のパネルの幅は、シートを変えたら測り直す
+  roster.preview = roster.rows.length ? 0 : null;
+}
+
+/* ---------- お知らせの帯（画面の上） ---------- */
+let noticeId = null;
+function showNotice(id, msg, buttons = []) {
+  noticeId = id;
+  $('#noticeMsg').textContent = msg;
+  const box = $('#noticeBtns');
+  box.innerHTML = '';
+  for (const [label, fn, primary] of buttons) {
+    const b = document.createElement('button');
+    b.className = 'btn' + (primary ? ' primary' : '');
+    b.textContent = label;
+    b.addEventListener('click', fn);
+    box.appendChild(b);
+  }
+  $('#noticeBar').hidden = false;
+}
+function hideNotice(id) {
+  if (id && id !== noticeId) return;
+  noticeId = null;
+  $('#noticeBar').hidden = true;
+}
+
+/* ---------- 名簿のファイルを覚えておく（このパソコンのこのブラウザだけ） ---------- */
+// 配置ファイルには名簿の名前だけを入れ、名簿の場所はブラウザの中（IndexedDB）に覚えておく。
+// 名簿の中身は保存しない
+const handleDB = {
+  open() {
+    return this.p || (this.p = new Promise((ok, ng) => {
+      const r = indexedDB.open('shorui-handles', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('h');
+      r.onsuccess = () => ok(r.result);
+      r.onerror = () => ng(r.error);
+    }));
+  },
+  async get(key) {
+    try {
+      const db = await this.open();
+      return await new Promise((ok) => { const q = db.transaction('h').objectStore('h').get(key); q.onsuccess = () => ok(q.result); q.onerror = () => ok(null); });
+    } catch (e) { return null; }
+  },
+  async set(key, val) {
+    try {
+      const db = await this.open();
+      await new Promise((ok) => { const t = db.transaction('h', 'readwrite'); t.objectStore('h').put(val, key); t.oncomplete = ok; t.onerror = ok; });
+    } catch (e) {}
+  },
+};
+
+const ROSTER_TYPES = [{ description: '名簿（Excel）', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx', '.xlsm'], 'application/vnd.ms-excel': ['.xls'] } }];
+
+// 「名簿を開く」：場所を覚えられるよう、できればファイルを選ぶ画面（showOpenFilePicker）を使う
+async function pickRoster() {
+  if (!window.showOpenFilePicker) { $('#rosterInput').click(); return; }
+  try {
+    const [h] = await window.showOpenFilePicker({ id: 'shorui-roster', types: ROSTER_TYPES });
+    await openRoster(await h.getFile(), h);
+  } catch (e) {
+    if (e.name !== 'AbortError') toast('名簿を開けませんでした');
+  }
+}
+
+// 配置ファイルに書いてある名簿を開く（覚えていれば、許可を1回押すだけ）
+async function reopenRoster(ref) {
+  const h = await handleDB.get('roster:' + ref.fileName);
+  if (h) {
+    try {
+      let perm = await h.queryPermission({ mode: 'read' });
+      if (perm !== 'granted') perm = await h.requestPermission({ mode: 'read' });
+      if (perm === 'granted') { await openRoster(await h.getFile(), h, ref.sheetName); return; }
+    } catch (e) { /* 移動・削除などで見つからない */ }
+  }
+  toast(`名簿「${ref.fileName}」が見つかりませんでした。名簿を選んでください`);
+  pickRoster();
+}
+
+// 配置ファイルを開いたあとに、名簿を開くよう案内する
+async function offerRoster(ref) {
+  if (!ref || !ref.fileName) return;
+  if (roster && roster.fileName === ref.fileName) return;   // もう開いている
+  const known = !!(await handleDB.get('roster:' + ref.fileName));
+  showNotice('roster', known
+    ? `この様式で使う名簿「${ref.fileName}」を開きますか？`
+    : `この様式で使う名簿は「${ref.fileName}」です。このパソコンでは場所がわからないので、名簿を選んでください。`, [
+    [known ? '名簿を開く' : '名簿を選ぶ', () => (known ? reopenRoster(ref) : pickRoster()), true],
+    ['別の名簿を選ぶ', pickRoster],
+    ['あとで', () => hideNotice('roster')],
+  ]);
+}
+
+async function openRoster(file, handle, sheetName) {
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    roster = { workbook: wb, buf, fileName: file.name, filter: '' };
+    useSheet(sheetName && wb.SheetNames.includes(sheetName) ? sheetName : pickSheet(wb));
+  } catch (e) {
+    toast('名簿を読めませんでした');
+    return;
+  }
+  if (handle) handleDB.set('roster:' + file.name, handle);
+  // 使う名簿が変わったら、配置ファイルに書く名簿の名前も変わるので「保存していない」扱いにする
+  if ((state.fields.length || state.bg) && (!state.rosterRef || state.rosterRef.fileName !== file.name)) dirty = true;
+  state.rosterRef = { fileName: file.name, sheetName: roster.sheetName };
+  hideNotice('roster');
+  setTab('roster');
+  renderAll();
+  const merged = state.fields.filter((f) => f.src).length;
+  toast(`${roster.rows.length}人を読み込みました` + (pages.length && !merged ? '（差し込み設定のある項目がありません）' : ''));
+}
+
+function personName(p) { return roster.nameCol >= 0 ? String(p[roster.nameCol]).trim() : '(名前なし)'; }
+// 申請書の種類を切り替えるボタン（色付き＝印刷する。オレンジの枠＝名簿から手で変えたもの）
+function kindChips(p, onChange) {
+  const box = document.createElement('span');
+  box.className = 'kchips';
+  const draw = () => {
+    box.innerHTML = '';
+    const now = kindsFor(p), base = rosterKinds(p);
+    for (const k of Object.keys(KINDS)) {
+      const b = document.createElement('button');
+      const on = now.includes(k), changed = on !== base.includes(k);
+      b.className = 'kchip' + (on ? ' on' : '') + (changed ? ' changed' : '');
+      b.textContent = KINDS[k].short;
+      b.title = `${KINDS[k].name}の申請書を${on ? '印刷しない' : '印刷する'}に切り替え` + (changed ? '（名簿から手で変えています）' : '');
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = new Set(kindsFor(p));
+        next.has(k) ? next.delete(k) : next.add(k);
+        const same = base.length === next.size && base.every((x) => next.has(x));
+        if (same) roster.override.delete(p); else roster.override.set(p, next);
+        draw(); onChange();
+      });
+      box.appendChild(b);
+    }
+  };
+  draw();
+  return box;
+}
+
+function renderRosterPanel() {
+  panelRoster.innerHTML = '';
+  if (!roster) {
+    // 名簿がないときは、表示中の書類をそのまま印刷できる
+    panelRoster.innerHTML = `<p class="hint">
+      名簿から差し込んで印刷するときは、右の「差し込み印刷」のパネルの「名簿を開く」で会員名簿のExcelを選んでください。
+      名簿の列（氏名・住所・生年月日など）が各項目に差し込まれ、ここで印刷する人を選べます。<br>
+      名簿の内容はこの画面の中だけで使い、どこにも保存・送信しません。</p>`;
+    const h = document.createElement('p');
+    h.className = 'hint';
+    h.textContent = '名簿を使わない書類は、下の「印刷」で表示中の書類をそのまま印刷します。';
+    const b = document.createElement('button');
+    b.className = 'btn primary';
+    b.textContent = '印刷';
+    b.disabled = !pages.length;
+    b.title = pages.length ? '表示中の書類を印刷' : '先に様式か背景を開いてください';
+    b.addEventListener('click', printCurrent);
+    panelRoster.append(h, b);
+    return;
+  }
+  // シート選択
+  const sheetSel = document.createElement('select');
+  sheetSel.className = 'sheet-select';
+  for (const n of roster.workbook.SheetNames) {
+    const o = document.createElement('option');
+    o.value = n; o.textContent = 'シート：' + n;
+    sheetSel.appendChild(o);
+  }
+  sheetSel.value = roster.sheetName;
+  sheetSel.addEventListener('change', () => {
+    useSheet(sheetSel.value);
+    if (state.rosterRef) state.rosterRef.sheetName = sheetSel.value;
+    renderAll();
+  });
+
+
+  const btns = document.createElement('div');
+  btns.className = 'row-btns';
+  const mk = (label, fn) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = label; b.addEventListener('click', fn); btns.appendChild(b); return b; };
+
+  const list = document.createElement('div');
+  list.className = 'people';
+
+  const printBtn = document.createElement('button');
+  printBtn.className = 'btn primary';
+
+  const visible = () => roster.rows
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => !roster.filter || personName(p).replace(/\s/g, '').includes(roster.filter.replace(/\s/g, '')));
+
+  // 印刷する申請書の種類
+  const kindSel = document.createElement('select');
+  kindSel.className = 'sheet-select';
+  kindSel.innerHTML = `
+    <option value="each">ほかの書類用（1人1枚）</option>
+    <option value="auto">申請書：免許ごとに1枚ずつ（自動）</option>
+    <option value="gun1">申請書：第1種銃猟だけ</option>
+    <option value="gun2">申請書：第2種銃猟だけ</option>
+    <option value="trap">申請書：わなだけ</option>
+    <option value="net">申請書：網猟だけ</option>`;
+  kindSel.value = printKind;
+  kindSel.addEventListener('change', () => {
+    printKind = kindSel.value;
+    if (state.fields.length || state.bg) dirty = true;   // 印刷のしかたも様式に保存する
+    updateCount(); renderFields(); renderInputPanel(); renderPreviewBar();
+  });
+
+  const updateCount = () => {
+    const people = [...roster.selected].map((i) => roster.rows[i]);
+    const sheets = people.reduce((n, p) => n + jobsFor(p).length, 0);
+    const none = people.filter((p) => !jobsFor(p).length).length;
+    printBtn.textContent = `選んだ人を印刷（${people.length}人・${sheets}部）`;
+    printBtn.title = none ? `登録の印がない${none}人は印刷されません` : '';
+    printBtn.disabled = sheets === 0 || !pages.length;
+  };
+
+  const drawList = () => {
+    list.innerHTML = '';
+    for (const { p, i } of visible()) {
+      const item = document.createElement('div');
+      item.className = 'person' + (i === roster.preview ? ' preview' : '');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = roster.selected.has(i);
+      cb.addEventListener('click', (e) => e.stopPropagation());
+      cb.addEventListener('change', () => { cb.checked ? roster.selected.add(i) : roster.selected.delete(i); updateCount(); });
+      const no = document.createElement('span');
+      no.className = 'no'; no.textContent = roster.noCol >= 0 ? p[roster.noCol] : i + 1;
+      const nm = document.createElement('span');
+      nm.textContent = personName(p);
+      const tg = kindChips(p, () => {
+        updateCount(); resetBtn.disabled = !roster.override.size;
+        if (i === roster.preview) { renderFields(); renderInputPanel(); renderPreviewBar(); }
+      });
+      item.append(cb, no, nm, tg);
+      item.title = 'クリックで書類に表示';
+      item.addEventListener('click', () => {
+        roster.preview = i;
+        list.querySelectorAll('.person').forEach((el) => el.classList.remove('preview'));
+        item.classList.add('preview');
+        renderFields(); renderInputPanel(); renderPreviewBar();
+        renderColPanel();   // 列の見本の値を更新
+      });
+      list.appendChild(item);
+    }
+    if (!list.children.length) list.innerHTML = '<p class="hint" style="padding:8px">該当する人がいません。</p>';
+  };
+
+  mk('全員を選択', () => { visible().forEach(({ i }) => roster.selected.add(i)); drawList(); updateCount(); });
+  mk('選択を解除', () => { roster.selected.clear(); drawList(); updateCount(); });
+  const resetBtn = mk('名簿どおりに戻す', () => {
+    roster.override.clear(); resetBtn.disabled = true;
+    drawList(); updateCount(); renderFields(); renderInputPanel(); renderPreviewBar();
+  });
+  resetBtn.title = '人ごとに手で切り替えた申請書の種類を、すべて名簿の登録欄どおりに戻す';
+  resetBtn.disabled = !roster.override.size;
+  printBtn.addEventListener('click', printSelected);
+
+  const note = document.createElement('div');
+  note.className = 'sub';
+  note.textContent = `${roster.rows.length}人　名前をクリックすると書類に表示します。`
+    + '右のボタン（銃1・銃2・わな・網）で、印刷する申請書を人ごとに切り替えられます。';
+
+  // 名簿のファイル名（別の名簿は右の「差し込み印刷」のパネルから開く）
+  const fname = document.createElement('div');
+  fname.className = 'sub';
+  fname.textContent = '名簿：' + roster.fileName;
+  panelRoster.append(fname, sheetSel, note, btns, list, kindSel, printBtn);
+  drawList(); updateCount();
+}
+
+// 右側のパネル：名簿の列の一覧。書類へドラッグすると差し込み欄になる
+const colPanel = $('#colPanel');
+let colFilter = '';
+
+// 右のパネルの幅：名簿の列名と、全員分の値のうち、いちばん長い文字が収まる幅
+// （表示する人を切り替えても幅が変わらないように、名簿全体で決める）
+function colPanelWidth() {
+  const c = colPanelWidth.ctx || (colPanelWidth.ctx = document.createElement('canvas').getContext('2d'));
+  const fam = getComputedStyle(document.body).fontFamily;
+  const measure = (text, font) => { c.font = font; return c.measureText(String(text)).width; };
+  let w = 0;
+  roster.headers.forEach((h, i) => {
+    if (!h) return;
+    w = Math.max(w, measure(h, `600 14.5px ${fam}`));
+    for (const p of roster.rows) w = Math.max(w, measure(String(p[i] ?? '').trim(), `14px ${fam}`));
+  });
+  // 枠の中の余白・枠線・パネルの余白・スクロールバーの分を足す
+  return Math.ceil(w + 20 + 2 + 24 + 17 + 4);   // 17：スクロールバー、4：測り方の誤差の分
+}
+
+// 「名簿を開く」ボタン（右の「差し込み印刷」のパネルに置く）
+function rosterOpenButton(primary) {
+  const b = document.createElement('button');
+  b.className = 'btn' + (primary ? ' primary' : '');
+  b.textContent = roster ? '別の名簿を開く' : '名簿を開く';
+  b.title = '名簿のExcelを開く（欄の配置はそのまま）';
+  b.addEventListener('click', pickRoster);
+  return b;
+}
+
+// 右のパネル「差し込み印刷」：名簿を開く・名簿の列の一覧。閉じずに常に出しておく
+function renderColPanel() {
+  colPanel.hidden = false;
+  if (roster && roster.colWidth == null) roster.colWidth = colPanelWidth();
+  colPanel.style.width = roster ? roster.colWidth + 'px' : '';
+  colPanel.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'col-head';
+  const title = document.createElement('strong');
+  title.textContent = '差し込み印刷';
+  head.append(title);
+  const file = document.createElement('div');
+  file.className = 'sub col-file';
+  if (roster) {
+    // ファイル名と人数を分けておく（ファイル名だけを省略して、人数は残せるように）
+    const name = document.createElement('span');
+    name.className = 'col-file-name'; name.textContent = roster.fileName; name.title = roster.fileName;
+    const count = document.createElement('span');
+    count.className = 'col-file-count'; count.textContent = `（${roster.rows.length}人）`;
+    file.append(name, count);
+  } else file.textContent = 'まだ開いていません';
+  colPanel.append(head, file, rosterOpenButton(!roster));
+  if (!roster) {
+    const hint = document.createElement('p');
+    hint.className = 'sub';
+    hint.textContent = '名簿を開くと、ここに名簿の列（氏名・住所など）が並びます。書類へドラッグすると、その列を差し込む欄になります。';
+    colPanel.appendChild(hint);
+    return;
+  }
+  const hint = document.createElement('p');
+  hint.className = 'sub';
+  hint.textContent = '書類へドラッグして配置。既存の欄に重ねると、その欄の差し込みを入れ替えます。';
+  const box = document.createElement('div');
+  box.className = 'chips';
+  colPanel.append(hint, box);
+  fillColumnChips(box);
+}
+
+// 左の「背景」タブ：いまの背景・背景の変更・回転
+function renderBgPanel() {
+  panelBg.innerHTML = '';
+  const info = document.createElement('div');
+  info.className = 'hint';
+  if (state.bg) {
+    const kind = state.bg.kind === 'pdf' ? 'PDF' : '画像';
+    info.innerHTML = 'いまの背景：<b></b>';
+    info.querySelector('b').textContent = `${state.bg.name}（${kind}・${pages.length}ページ）`;
+  } else {
+    info.textContent = 'まだ背景がありません。「背景を選ぶ」で、書類のPDFか画像（JPG・PNGなど）を選んでください。';
+  }
+  const change = document.createElement('button');
+  change.className = 'btn' + (state.bg ? '' : ' primary');
+  change.textContent = state.bg ? '背景の変更' : '背景を選ぶ';
+  change.title = 'PDF 1つ、または画像（複数選ぶと複数ページ）';
+  change.addEventListener('click', () => pickBackground());
+  const rot = document.createElement('div');
+  rot.className = 'row-btns';
+  const rl = document.createElement('button');
+  rl.className = 'btn'; rl.textContent = '↺ 左に回す'; rl.disabled = !state.bg;
+  rl.addEventListener('click', () => rotatePdf(-90));
+  const rr = document.createElement('button');
+  rr.className = 'btn'; rr.textContent = '↻ 右に回す'; rr.disabled = !state.bg;
+  rr.addEventListener('click', () => rotatePdf(90));
+  rot.append(rl, rr);
+  const rotTitle = document.createElement('div');
+  rotTitle.className = 'group-title';
+  rotTitle.textContent = '背景の向き';
+  const note = document.createElement('p');
+  note.className = 'sub';
+  note.textContent = '背景を変えても、欄の配置はそのままです。新しい様式で欄の位置が変わったときは、配置タブで直してください。'
+    + '画像は幅をA4に合わせ、高さは画像の比率どおりにします。';
+  panelBg.append(info, change, rotTitle, rot, note);
+}
+
+function fillColumnChips(box) {
+  box.innerHTML = '';
+  const p = previewPerson();
+  const q = norm(colFilter);
+  roster.headers.forEach((h, i) => {
+    if (!h || (q && !norm(h).includes(q))) return;
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.draggable = true;
+    const b = document.createElement('b');
+    b.textContent = h;
+    const v = document.createElement('span');
+    v.textContent = p ? String(p[i] ?? '').trim() || '（空）' : '';
+    chip.append(b, v);
+    chip.title = `${XLSX.utils.encode_col(i)}列：${h}\n空いている所に置くと新しい欄、既存の欄に重ねるとその欄に差し込みます`;
+    chip.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('application/x-shorui-col', norm(h));
+      e.dataTransfer.setData('text/plain', `{${norm(h)}}`);
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    box.appendChild(chip);
+  });
+  if (!box.children.length) box.innerHTML = '<p class="hint">該当する列がありません。</p>';
+}
+
+// 名簿の列を書類に落としたとき
+const COL_TYPE = 'application/x-shorui-col';
+function onColumnDragOver(e) {
+  if (!e.dataTransfer.types.includes(COL_TYPE)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  const over = e.target.closest('.field');
+  viewer.querySelectorAll('.drop-target').forEach((el) => el !== over && el.classList.remove('drop-target'));
+  over?.classList.add('drop-target');
+}
+
+function onColumnDrop(e) {
+  const col = e.dataTransfer.getData(COL_TYPE);
+  if (!col) return;
+  e.preventDefault();
+  e.stopPropagation();
+  viewer.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
+  const wrap = e.currentTarget;
+  const rect = wrap.getBoundingClientRect();
+  const src = `{${col}}`;
+  const fieldEl = e.target.closest('.field');
+  let f;
+  if (fieldEl) {
+    f = byId(fieldEl.dataset.id);
+    f.src = src;
+    toast(`「${f.label}」に名簿の「${col}」を差し込みます`);
+  } else {
+    f = {
+      id: uid(), page: +wrap.dataset.page, type: 'text', label: col, value: '', src, kind: '',
+      x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height - 0.006,
+      size: 10.5, spacing: 0, vertical: false, font: 'mincho', bold: true, lineHeight: 1.2,
+    };
+    state.fields.push(f);
+  }
+  autosave();
+  select(f.id);
+}
+
+function renderPreviewBar() {
+  viewer.querySelector('.preview-bar')?.remove();
+  const p = previewPerson();
+  if (!p || !pages.length) return;
+  const bar = document.createElement('div');
+  bar.className = 'preview-bar';
+  const kind = previewKind();
+  const kinds = kindsFor(p);
+  let what = printKind === 'each' ? '1人1枚で印刷'
+    : kind ? `${KINDS[kind].name}の申請書` : '登録の印なし（印刷されません）';
+  if (printKind === 'auto' && kinds.length > 1) {
+    what += `（ほかに${kinds.slice(1).map((k) => KINDS[k].name).join('・')}の申請書も印刷されます）`;
+  }
+  bar.textContent = `表示中：${personName(p)} さん　${what}`;
+  viewer.prepend(bar);
+}
+
+/* ---------- 背景（PDF・画像） ---------- */
+// state.bg：いまの背景。配置ファイルに埋め込むため、元のデータ（base64）も持つ
+//   { name, kind: 'pdf', mime, data }  または  { name, kind: 'images', images: [{ name, mime, data }] }
+const toB64 = (buf) => {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+const fromB64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+const isImageFile = (f) => /^image\//.test(f.type) || /\.(jpe?g|png|gif|webp|bmp)$/i.test(f.name);
+const isPdfFile = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+
+// 画像を、PDFと同じ使い方ができる形にする（1枚＝1ページ）。
+// 画像には紙の大きさがないので、幅をA4（縦長ならA4縦の幅、横長ならA4横の幅）とし、高さは画像の比率どおりにする
+async function imageDoc(images) {
+  const imgs = await Promise.all(images.map((im) => new Promise((ok, ng) => {
+    const el = new Image();
+    el.onload = () => ok(el);
+    el.onerror = () => ng(new Error('画像を読めません：' + im.name));
+    el.src = `data:${im.mime};base64,${im.data}`;
+  })));
+  return {
+    numPages: imgs.length,
+    getPage: async (n) => {
+      const img = imgs[n - 1];
+      const iw = img.naturalWidth, ih = img.naturalHeight;
+      const wPt = iw >= ih ? 841.89 : 595.28, hPt = wPt * ih / iw;
+      return {
+        rotate: 0,
+        getViewport: ({ scale, rotation = 0 }) => (rotation % 180
+          ? { width: hPt * scale, height: wPt * scale, rotation } : { width: wPt * scale, height: hPt * scale, rotation }),
+        render: ({ canvasContext: c, viewport: vp }) => {
+          // 大きすぎる画像は、画面と印刷に十分な大きさに縮めて描く
+          const k = Math.min(1, 2600 / Math.max(vp.width, vp.height));
+          c.canvas.width = Math.round(vp.width * k); c.canvas.height = Math.round(vp.height * k);
+          c.save();
+          c.fillStyle = '#fff'; c.fillRect(0, 0, c.canvas.width, c.canvas.height);
+          c.translate(c.canvas.width / 2, c.canvas.height / 2);
+          c.rotate((vp.rotation || 0) * Math.PI / 180);
+          const dw = (vp.rotation % 180 ? c.canvas.height : c.canvas.width), dh = (vp.rotation % 180 ? c.canvas.width : c.canvas.height);
+          c.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+          c.restore();
+          return { promise: Promise.resolve() };
+        },
+      };
+    },
+  };
+}
+
+// bg（上の形）を描ける状態にする
+async function loadBgDoc(bg) {
+  if (bg.kind === 'pdf') {
+    return pdfjsLib.getDocument({
+      data: fromB64(bg.data),
+      isEvalSupported: false,   // 悪意のある PDF で任意のコードが動く弱点（CVE-2024-4367）への対策
+    }).promise;
+  }
+  return imageDoc(bg.images);
+}
+
+// 選んだファイル（PDF 1つ、または画像1枚以上）から bg を作る
+async function bgFromFiles(files) {
+  const list = [...files];
+  const pdf = list.find(isPdfFile);
+  if (pdf) return { name: pdf.name, kind: 'pdf', mime: 'application/pdf', data: toB64(await pdf.arrayBuffer()) };
+  const imgs = list.filter(isImageFile).sort((a, b) => a.name.localeCompare(b.name, 'ja', { numeric: true }));
+  if (!imgs.length) return null;
+  const images = [];
+  for (const f of imgs) images.push({ name: f.name, mime: f.type || 'image/png', data: toB64(await f.arrayBuffer()) });
+  const name = imgs.length === 1 ? imgs[0].name : `${imgs[0].name} ほか${imgs.length - 1}枚`;
+  return { name, kind: 'images', images };
+}
+
+// 背景を表示する（keepFields：置いてある欄はそのまま。ページが減ったら最後のページへ寄せる）
+async function setBackground(bg, { rotate } = {}) {
+  let doc;
+  try { doc = await loadBgDoc(bg); }
+  catch (e) { toast('背景を開けませんでした（ファイルが壊れていないか、lib フォルダがアプリと同じ場所にあるか確認してください）'); return false; }
+  pdfDoc = doc;
+  state.bg = bg;
+  state.fileName = bg.name;
+  state.rotate = rotate != null ? rotate : loadRotate();
+  saveRotate();
+  await renderPages();
+  const last = pages.length - 1;
+  let moved = 0;
+  for (const f of state.fields) if (f.page > last) { f.page = last; moved++; }
+  setBackground.moved = moved;   // 呼んだ側のお知らせに含める
+  if (moved) toast(`ページ数が減ったので、${moved}個の欄を最後のページに移しました`);
+  updatePageStyle();
+  renderAll();
+  hideNotice('bg');
+  // 背景のない様式を開いたあとなら、ここで名簿の案内を出す
+  if (pendingRosterRef) { const r = pendingRosterRef; pendingRosterRef = null; offerRoster(r); }
+  return true;
+}
+
+// 「背景を開く」：欄の配置はそのままで、背景だけを入れ替える
+async function openBackground(files) {
+  if (!files || !files.length) return;
+  toast('読み込み中…');
+  let bg;
+  try { bg = await bgFromFiles(files); } catch (e) { bg = null; }
+  if (!bg) { toast('PDFか画像（JPG・PNGなど）を選んでください'); return; }
+  const had = !!state.bg;
+  if (!(await setBackground(bg))) return;
+  if (state.fields.length) { dirty = true; autosave(); }
+  toast((had ? `背景を「${bg.name}」に変えました（欄の配置はそのままです）` : `「${bg.name}」を開きました`)
+    + (setBackground.moved ? `。ページ数が減ったので、${setBackground.moved}個の欄を最後のページに移しました` : ""));
+}
+
+/* ---------- PDFの回転 ---------- */
+let pdfDoc = null;
+let pendingRosterRef = null;   // 背景のない様式を開いたときに、あとで案内する名簿
+// PDFの向きは、PDFのファイル名ごとにこのブラウザに覚えておく（個人の情報は含まない）
+const rotKey = () => 'shorui-rot:' + state.fileName;
+function loadRotate() {
+  try { return +(localStorage.getItem(rotKey()) || 0); } catch (e) { return 0; }
+}
+function saveRotate() {
+  try {
+    if (state.rotate) localStorage.setItem(rotKey(), String(state.rotate));
+    else localStorage.removeItem(rotKey());
+  } catch (e) {}
+}
+
+// d = 90（右）／-90（左）。置いてある項目も、回したページの同じ場所へ移す（文字の向きはそのまま）
+async function rotatePdf(d) {
+  if (!pdfDoc) { toast('先に背景（PDF・画像）を開いてください'); return; }
+  const before = state.fields.map((f) => {
+    const el = viewer.querySelector(`.field[data-id="${f.id}"]`);
+    const p = pages[f.page];
+    if (!el || !p) return null;
+    const pr = p.wrap.getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { cx: (r.left + r.width / 2 - pr.left) / pr.width, cy: (r.top + r.height / 2 - pr.top) / pr.height };
+  });
+  state.rotate = ((state.rotate || 0) + d + 360) % 360;
+  saveRotate();
+  await renderPages();
+  renderFields();
+  state.fields.forEach((f, i) => {
+    const b = before[i];
+    const el = viewer.querySelector(`.field[data-id="${f.id}"]`);
+    if (!b || !el) return;
+    const [nx, ny] = d > 0 ? [1 - b.cy, b.cx] : [b.cy, 1 - b.cx];
+    // 今の見た目の中心が (nx, ny) に来るように動かす（回転の軸に関係なく合う）
+    const pr = pages[f.page].wrap.getBoundingClientRect(), r = el.getBoundingClientRect();
+    f.x += nx - (r.left + r.width / 2 - pr.left) / pr.width;
+    f.y += ny - (r.top + r.height / 2 - pr.top) / pr.height;
+  });
+  autosave();
+  updatePageStyle();
+  renderAll();
+}
+
+// PDFのページを描く（state.rotate だけ回して）
+async function renderPages() {
+  viewer.innerHTML = '';
+  pages = [];
+  const pdf = pdfDoc;
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const rotation = (page.rotate + (state.rotate || 0)) % 360;
+    const base = page.getViewport({ scale: 1, rotation });
+    const vp = page.getViewport({ scale: 2.5, rotation });   // 印刷できる程度の解像度
+    const ratio = `${base.width} / ${base.height}`;
+    const u = `calc(100cqw / ${base.width})`;      // 1pt
+    const wrap = document.createElement('div');
+    wrap.className = 'page';
+    wrap.dataset.page = i - 1;
+    wrap.style.aspectRatio = ratio;
+    wrap.style.setProperty('--u', u);
+    const canvas = document.createElement('canvas');
+    canvas.width = vp.width; canvas.height = vp.height;
+    const layer = document.createElement('div');
+    layer.className = 'layer';
+    wrap.append(canvas, layer);
+    viewer.appendChild(wrap);
+    wrap.addEventListener('pointerdown', onPointerDown);
+    wrap.addEventListener('dragover', onColumnDragOver);
+    wrap.addEventListener('drop', onColumnDrop);
+    pages.push({ wrap, layer, canvas, ratio, u, wPt: base.width, hPt: base.height });
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+  }
+}
+
+/* ---------- 描画 ---------- */
+function renderAll() { renderFields(); renderInputPanel(); renderRosterPanel(); renderLayoutPanel(); renderBgPanel(); renderPreviewBar(); renderColPanel(); }
+
+/* ---------- 書体 ---------- */
+// Windows・Office に入っている書体。PCに入っていないものは選べないようにする
+const FONTS = {
+  mincho: { name: '游明朝', fam: ['Yu Mincho', 'YuMincho', '游明朝'] },
+  gothic: { name: '游ゴシック', fam: ['Yu Gothic', 'YuGothic', '游ゴシック'] },
+  msmincho: { name: 'ＭＳ 明朝', fam: ['MS Mincho', 'ＭＳ 明朝'] },
+  msgothic: { name: 'ＭＳ ゴシック', fam: ['MS Gothic', 'ＭＳ ゴシック'] },
+  bizmincho: { name: 'BIZ UD明朝', fam: ['BIZ UDMincho Medium', 'BIZ UDMincho', 'BIZ UD明朝 Medium'] },
+  bizgothic: { name: 'BIZ UDゴシック', fam: ['BIZ UDGothic', 'BIZ UDゴシック'] },
+  meiryo: { name: 'メイリオ', fam: ['Meiryo', 'メイリオ'] },
+  kyokasho: { name: 'UDデジタル教科書体', fam: ['UD Digi Kyokasho N-R', 'UD デジタル 教科書体 N-R'] },
+  kaisho: { name: 'HG正楷書体-PRO', fam: ['HGSeikaishotaiPRO', 'HG正楷書体-PRO'] },
+  hgkyokasho: { name: 'HG教科書体', fam: ['HGKyokashotai', 'HG教科書体'] },
+  gyosho: { name: 'HG行書体', fam: ['HGGyoshotai', 'HG行書体'] },
+  hgmincho: { name: 'HG明朝B', fam: ['HGMinchoB', 'HG明朝B'] },
+  hggothic: { name: 'HGゴシックM', fam: ['HGGothicM', 'HGゴシックM'] },
+  maru: { name: 'HG丸ゴシックM-PRO', fam: ['HGMaruGothicMPRO', 'HG丸ｺﾞｼｯｸM-PRO'] },
+  pop: { name: 'HG創英角ポップ体', fam: ['HGSoeiKakupoptai', 'HG創英角ﾎﾟｯﾌﾟ体'] },
+  koin: { name: 'C&G半古印', fam: ['Ｃ＆Ｇ半古印'] },
+};
+
+// 書体がPCに入っているか（既定の書体と文字の幅が変わるかで判定）
+function fontAvailable(family) {
+  const c = fontAvailable.ctx || (fontAvailable.ctx = document.createElement('canvas').getContext('2d'));
+  const text = '永あア漢字書体abcW123';
+  return ['monospace', 'serif', 'sans-serif'].some((base) => {
+    c.font = `40px ${base}`;
+    const w0 = c.measureText(text).width;
+    c.font = `40px "${family}", ${base}`;
+    return c.measureText(text).width !== w0;
+  });
+}
+for (const k in FONTS) FONTS[k].ok = FONTS[k].fam.some(fontAvailable);
+
+function fontCss(key) {
+  const f = FONTS[key] || FONTS.mincho;
+  const generic = /gothic|meiryo|maru|pop/.test(key) ? 'sans-serif' : 'serif';
+  return f.fam.map((n) => `"${n}"`).join(', ') + ', ' + generic;
+}
+
+// 書体の選択肢（PCにない書体は選べない）
+function fontOptions(select, current, blank) {
+  select.innerHTML = blank ? `<option value="">${blank}</option>` : '';
+  for (const [k, f] of Object.entries(FONTS)) {
+    const o = document.createElement('option');
+    o.value = k;
+    o.textContent = f.ok ? f.name : `${f.name}（このPCにありません）`;
+    o.disabled = !f.ok && k !== current;
+    o.style.fontFamily = fontCss(k);
+    select.appendChild(o);
+  }
+  select.value = current || '';
+}
+
+// interactive=false は印刷用（空欄は出さない）
+function buildFieldEl(f, value, interactive) {
+  const empty = f.type === 'text' ? !value : !value;
+  if (empty && !interactive) return null;
+  const el = document.createElement('div');
+  el.className = 'field t-' + f.type;
+  el.style.left = f.x * 100 + '%';
+  el.style.top = f.y * 100 + '%';
+  if (f.type === 'circle') {
+    el.style.width = f.w * 100 + '%';
+    el.style.height = f.h * 100 + '%';
+    el.style.borderWidth = `calc(var(--u) * ${f.bold ? 1.8 : 1})`;   // 太字は線を太く
+  } else {
+    el.style.fontFamily = fontCss(f.font);
+    if (f.vertical) el.classList.add('vertical');
+    el.style.fontSize = `calc(var(--u) * ${f.size})`;
+    el.style.letterSpacing = (f.spacing || 0) + 'em';
+    if (f.bold) el.style.fontWeight = 'bold';
+    if (f.lineHeight) el.style.lineHeight = f.lineHeight;
+    // 手入力の欄で一部の書式を変えていれば、文字ごとに表示
+    if (f.type === 'text' && value && !f.src && f.segs && value === f.value) appendSegs(el, f);
+    else el.textContent = f.type === 'check' ? '✓' : (value || f.label);
+  }
+  if (f.rotate) {
+    el.style.transform = `rotate(${f.rotate}deg)`;
+    // 文字欄は書き始め（左上）を軸に回す。中心で回すと、文字数で位置が変わってしまう
+    if (f.type === 'text') el.style.transformOrigin = '0 0';
+  }
+  if (empty) el.classList.add('ghost');
+  return el;
+}
+
+function renderFields() {
+  const person = previewPerson();
+  const kind = previewKind();
+  pages.forEach((p) => (p.layer.innerHTML = ''));
+  for (const f of state.fields) {
+    const p = pages[f.page];
+    if (!p) continue;
+    const el = buildFieldEl(f, fieldValue(f, person, kind), true);
+    el.dataset.id = f.id;
+    el.title = f.label + (f.src ? `（名簿：${f.src}）` : '');
+    if (selection.includes(f.id)) {
+      el.classList.add('selected');
+      if (selection.length > 1 && f.id === selection[0]) el.classList.add('anchor');
+      if (selection.length === 1 && f.type === 'circle') {
+        const h = document.createElement('div');
+        h.className = 'handle';
+        el.appendChild(h);
+      }
+    }
+    p.layer.appendChild(el);
+  }
+}
+
+function sortedFields() {
+  return [...state.fields].sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x);
+}
+
+function renderInputPanel() {
+  panelInput.innerHTML = '';
+  if (!pages.length) {
+    panelInput.innerHTML = '<p class="hint">様式を開くか背景を選ぶと、ここに入力欄が並びます。</p>';
+    return;
+  }
+  if (!state.fields.length) {
+    panelInput.innerHTML = '<p class="hint">まだ入力欄がありません。上の「文字」「✓」「○」を選んで、ページ上をクリックしてください。</p>';
+    return;
+  }
+  const person = previewPerson();
+  const kind = previewKind();
+  if (state.fields.some((f) => f.src)) {
+    const h = document.createElement('p');
+    h.className = 'hint';
+    h.textContent = person
+      ? '「名簿」の付いた欄は名簿から入ります（変更は名簿のExcel側で）。それ以外の欄は全員共通です。'
+      : '「名簿」の付いた欄は、名簿を開くと自動で入ります。';
+    panelInput.appendChild(h);
+  }
+  let lastPage = -1;
+  for (const f of sortedFields()) {
+    if (f.page !== lastPage) {
+      lastPage = f.page;
+      const g = document.createElement('div');
+      g.className = 'group-title';
+      g.textContent = `${f.page + 1}ページ目`;
+      panelInput.appendChild(g);
+    }
+    const merged = !!f.src;
+    const row = document.createElement('div');
+    row.className = 'row' + (selection.includes(f.id) ? ' sel' : '') + (merged ? ' merged' : '');
+    row.dataset.id = f.id;
+    const lab = document.createElement('label');
+    lab.textContent = f.label;
+    lab.title = f.label;
+    let input;
+    let tools = null;
+    if (f.type === 'text' && !merged) {
+      // 手入力の文字欄：一部の文字だけ書体・大きさ・太さを変えられる
+      ({ editor: input, tools } = buildRichEditor(f));
+      lab.addEventListener('click', () => input.focus());
+    } else if (f.type === 'text') {
+      // 名簿から入る欄は表示だけ（行数に合わせて高さを変える）
+      input = document.createElement('textarea');
+      input.readOnly = true;
+      input.className = 'merged';
+      input.value = person ? fieldValue(f, person, kind) : '';
+      input.placeholder = f.src;
+      input.rows = Math.max(1, input.value.split('\n').length);
+    } else {
+      input = document.createElement('input');
+      input.type = 'checkbox';
+      if (merged) {
+        input.disabled = true;
+        input.checked = person ? fieldValue(f, person, kind) : false;
+      } else {
+        input.checked = !!f.value;
+        input.addEventListener('change', () => { f.value = input.checked; renderFields(); autosave(); });
+      }
+    }
+    input.id = 'in-' + f.id;
+    if (input.tagName !== 'DIV') lab.htmlFor = input.id;
+    input.addEventListener('focus', () => select(f.id, { scroll: true, keepPanel: true }));
+    row.append(lab, input);
+    if (tools) row.appendChild(tools);
+    panelInput.appendChild(row);
+  }
+}
+
+/* ---------- 一部だけ書式を変えられる文字欄 ---------- */
+// f.segs = [{ t: 文字, size?: pt, font?: 書体（FONTS のキー）, bold?: true|false }]
+// 指定のない部分は、欄の設定（配置タブ）に従う。f.value は文字だけをつないだもの
+function segsOf(f) {
+  return f.segs && f.segs.length ? f.segs : (f.value ? [{ t: f.value }] : []);
+}
+const sameStyle = (a, b) => a.size === b.size && a.font === b.font && a.bold === b.bold;
+function mergeSegs(segs) {
+  const out = [];
+  for (const s of segs) {
+    if (!s.t) continue;
+    const last = out[out.length - 1];
+    if (last && sameStyle(last, s)) last.t += s.t;
+    else out.push({ ...s });
+  }
+  return out;
+}
+const hasStyle = (segs) => segs.some((s) => s.size != null || s.font != null || s.bold != null);
+
+// 文字の範囲 [start, end) に書式を付ける（null はその書式を外す）
+function styleRange(segs, start, end, patch) {
+  const out = [];
+  let i = 0;
+  for (const s of segs) {
+    const a = i, b = i + s.t.length;
+    i = b;
+    if (b <= start || a >= end) { out.push({ ...s }); continue; }
+    if (a < start) out.push({ ...s, t: s.t.slice(0, start - a) });
+    const mid = { ...s, t: s.t.slice(Math.max(start, a) - a, Math.min(end, b) - a) };
+    for (const k in patch) { if (patch[k] == null) delete mid[k]; else mid[k] = patch[k]; }
+    out.push(mid);
+    if (b > end) out.push({ ...s, t: s.t.slice(end - a) });
+  }
+  return mergeSegs(out);
+}
+
+// 書類上の表示（文字ごとの書式を span で）
+function appendSegs(el, f) {
+  for (const s of segsOf(f)) {
+    const span = document.createElement('span');
+    span.textContent = s.t;
+    if (s.size != null) span.style.fontSize = `calc(var(--u) * ${s.size})`;
+    if (s.font) span.style.fontFamily = fontCss(s.font);
+    if (s.bold != null) span.style.fontWeight = s.bold ? 'bold' : 'normal';
+    el.appendChild(span);
+  }
+}
+
+// 入力欄の中身 ⇔ segs
+function renderEditor(ed, f) {
+  ed.innerHTML = '';
+  const segs = segsOf(f);
+  for (const s of segs) {
+    const span = document.createElement('span');
+    if (s.size != null) {
+      span.dataset.size = s.size;
+      span.style.fontSize = Math.min(2, Math.max(0.6, s.size / f.size)) + 'em';   // 欄の大きさとの比率で表示
+    }
+    if (s.font) { span.dataset.font = s.font; span.style.fontFamily = fontCss(s.font); }
+    if (s.bold != null) { span.dataset.bold = s.bold ? '1' : '0'; span.style.fontWeight = s.bold ? 'bold' : 'normal'; }
+    s.t.split('\n').forEach((part, i) => {
+      if (i) span.appendChild(document.createElement('br'));
+      if (part) span.appendChild(document.createTextNode(part));
+    });
+    ed.appendChild(span);
+  }
+  // 最後が改行なら、カーソルを置けるよう空の行を足す
+  if (segs.length && segs[segs.length - 1].t.endsWith('\n')) ed.appendChild(document.createElement('br'));
+}
+
+function readEditor(ed) {
+  const segs = [];
+  const lastBr = ed.lastChild && (ed.lastChild.nodeName === 'BR' ? ed.lastChild : ed.lastChild.lastChild?.nodeName === 'BR' ? ed.lastChild.lastChild : null);
+  const walk = (node, style) => {
+    for (const ch of node.childNodes) {
+      if (ch.nodeType === 3) segs.push({ ...style, t: ch.data });
+      else if (ch.nodeName === 'BR') { if (ch !== lastBr) segs.push({ ...style, t: '\n' }); }
+      else if (ch.nodeType === 1) {
+        const st = { ...style };
+        if (ch.dataset.size) st.size = +ch.dataset.size;
+        if (ch.dataset.font) st.font = ch.dataset.font;
+        if (ch.dataset.bold) st.bold = ch.dataset.bold === '1';
+        if (/^(DIV|P)$/.test(ch.nodeName) && segs.length) segs.push({ ...style, t: '\n' });
+        walk(ch, st);
+      }
+    }
+  };
+  walk(ed, {});
+  return mergeSegs(segs);
+}
+
+// 文字数で数えた位置 ⇔ DOM の位置
+const nodeLen = (n) => n.nodeType === 3 ? n.data.length : n.nodeName === 'BR' ? 1
+  : [...n.childNodes].reduce((sum, c) => sum + nodeLen(c), 0);
+function offsetIn(ed, node, off) {
+  let pos = 0;
+  const visit = (n) => {
+    if (n === node) {
+      if (n.nodeType === 3) pos += off;
+      else for (let i = 0; i < off; i++) pos += nodeLen(n.childNodes[i]);
+      return true;
+    }
+    if (n.nodeType === 3 || n.nodeName === 'BR') { pos += nodeLen(n); return false; }
+    for (const c of n.childNodes) if (visit(c)) return true;
+    return false;
+  };
+  visit(ed);
+  return pos;
+}
+function pointAt(ed, pos) {
+  let found = null;
+  const visit = (n) => {
+    for (const c of n.childNodes) {
+      if (c.nodeType === 3) {
+        if (pos <= c.data.length) { found = [c, pos]; return true; }
+        pos -= c.data.length;
+      } else if (c.nodeName === 'BR') {
+        if (pos === 0) { found = [n, [...n.childNodes].indexOf(c)]; return true; }
+        pos -= 1;
+      } else if (visit(c)) return true;
+    }
+    return false;
+  };
+  visit(ed);
+  return found || [ed, ed.childNodes.length];
+}
+
+// 文字欄の中で選んだ範囲を覚えておく（書式の欄に移ってもなくならないように）
+document.addEventListener('selectionchange', () => {
+  const s = window.getSelection();
+  if (!s.rangeCount) return;
+  const ed = s.anchorNode && (s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentElement)?.closest('.rich');
+  if (!ed || !ed.setSel) return;
+  // 書体・大きさの欄に移ったときは、入力欄の中で選んでいた範囲を覚えたままにする
+  if (document.activeElement !== ed) return;
+  const r = s.getRangeAt(0);
+  ed.setSel([offsetIn(ed, r.startContainer, r.startOffset), offsetIn(ed, r.endContainer, r.endOffset)]);
+});
+
+function buildRichEditor(f) {
+  const ed = document.createElement('div');
+  ed.className = 'rich';
+  ed.contentEditable = 'true';
+  ed.spellcheck = false;
+  renderEditor(ed, f);
+  let sel = null;   // 最後に選んだ範囲（書式ボタンを押してもなくならないように）
+
+  const save = () => {
+    const segs = readEditor(ed);
+    f.segs = hasStyle(segs) ? segs : undefined;
+    f.value = segs.map((s) => s.t).join('');
+    renderFields(); autosave('in-' + f.id);
+  };
+  ed.addEventListener('input', save);
+  // 改行は <br>、貼り付けは文字だけ
+  ed.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.execCommand('insertLineBreak'); }
+  });
+  ed.addEventListener('paste', (e) => {
+    e.preventDefault();
+    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+  });
+  ed.setSel = (v) => { sel = v; };   // 選択範囲の記録（下の selectionchange から）
+
+  const apply = (makePatch) => {
+    // 文字を選んでいないときは、その欄の文字全部を変える
+    if (!sel || sel[0] === sel[1]) sel = [0, segsOf(f).reduce((n, s) => n + s.t.length, 0)];
+    if (sel[0] === sel[1]) { toast('先に文字を入力してください'); return; }
+    const segs = segsOf(f);
+    const patch = makePatch(segs, sel[0], sel[1]);
+    const next = styleRange(segs, sel[0], sel[1], patch);
+    f.segs = hasStyle(next) ? next : undefined;
+    renderEditor(ed, f);
+    renderFields(); autosave();
+    // 選んでいた範囲を選び直す
+    const [sn, so] = pointAt(ed, sel[0]);
+    const [en, eo] = pointAt(ed, sel[1]);
+    const r = document.createRange();
+    r.setStart(sn, so); r.setEnd(en, eo);
+    ed.focus();
+    const s = window.getSelection();
+    s.removeAllRanges(); s.addRange(r);
+  };
+
+  // 書式のボタン
+  const tools = document.createElement('div');
+  tools.className = 'rtools';
+  const keep = (el) => { el.addEventListener('mousedown', (e) => e.preventDefault()); return el; };
+  const font = document.createElement('select');
+  font.title = '選んだ文字の書体';
+  fontOptions(font, '', '書体');
+  font.addEventListener('change', () => { const v = font.value; font.value = ''; if (v) apply(() => ({ font: v })); });
+  const size = document.createElement('input');
+  size.type = 'number'; size.min = 4; size.max = 72; size.step = 0.5;
+  size.placeholder = f.size + 'pt'; size.title = '選んだ文字の大きさ（pt）。Enter で反映';
+  size.addEventListener('change', () => {
+    const v = parseFloat(size.value);
+    if (!isNaN(v) && v > 0) apply(() => ({ size: v }));
+  });
+  const step = (d) => keep(Object.assign(document.createElement('button'), {
+    className: 'btn', textContent: d > 0 ? 'A＋' : 'A－', title: d > 0 ? '選んだ文字を大きく' : '選んだ文字を小さく',
+    onclick: () => apply((segs, a, b) => {
+      // 選んだ範囲の先頭の大きさを基準に 1pt ずつ
+      let i = 0, cur = f.size;
+      for (const s of segs) { if (i + s.t.length > a) { cur = s.size ?? f.size; break; } i += s.t.length; }
+      const v = Math.max(4, cur + d);
+      size.value = v;
+      return { size: v };
+    }),
+  }));
+  const bold = keep(Object.assign(document.createElement('button'), {
+    className: 'btn', innerHTML: '<b>B</b>', title: '選んだ文字の太字を切り替え',
+    onclick: () => apply((segs, a, b) => {
+      let i = 0, allBold = true;
+      for (const s of segs) {
+        const x = i, y = i + s.t.length; i = y;
+        if (y > a && x < b && !(s.bold ?? f.bold)) allBold = false;
+      }
+      return { bold: !allBold };
+    }),
+  }));
+  const clear = keep(Object.assign(document.createElement('button'), {
+    className: 'btn', textContent: '標準', title: '選んだ文字の書式を、欄の設定（配置タブ）に戻す',
+    onclick: () => apply(() => ({ size: null, font: null, bold: null })),
+  }));
+  tools.append(font, size, step(-1), step(1), bold, clear);
+  return { editor: ed, tools };
+}
+
+function renderLayoutPanel() {
+  if (selection.length > 1) { renderAlignPanel(); return; }
+  const f = byId(selectedId);
+  if (!f) {
+    panelLayout.innerHTML = `<p class="hint">
+      ページ上の項目をクリックすると、ここで大きさや差し込む列を変えられます。<br><br>
+      ・ドラッグで移動<br>
+      ・矢印キーで微調整（Shift で大きく）<br>
+      ・Shift または Ctrl を押しながらクリックで複数選択（位置を揃えられます）<br>
+      ・Delete キーで削除<br>
+      ・ダブルクリックで入力欄へ移動</p>`;
+    return;
+  }
+  panelLayout.innerHTML = '';
+  const addRow = (label, input) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const l = document.createElement('label');
+    l.textContent = label;
+    row.append(l, input);
+    panelLayout.appendChild(row);
+  };
+  const num = (key, step, min, scale = 1) => {
+    const i = document.createElement('input');
+    i.type = 'number'; i.step = step; i.min = min;
+    i.value = +((f[key] || 0) * scale).toFixed(3);
+    i.addEventListener('input', () => {
+      const v = parseFloat(i.value);
+      if (!isNaN(v)) { f[key] = v / scale; renderFields(); autosave('num-' + key); }
+    });
+    return i;
+  };
+
+  const name = document.createElement('input');
+  name.type = 'text'; name.value = f.label;
+  name.addEventListener('input', () => { f.label = name.value; renderFields(); autosave('label'); });
+  name.addEventListener('change', renderInputPanel);
+  addRow('項目名', name);
+
+  // 差し込み
+  const src = document.createElement('input');
+  src.type = 'text'; src.value = f.src || ''; src.placeholder = '例：{氏名}　空欄なら手入力';
+  src.addEventListener('input', () => { f.src = src.value; renderFields(); autosave('src'); });
+  src.addEventListener('change', renderInputPanel);
+  addRow('差し込み', src);
+  if (roster) {
+    const pick = document.createElement('select');
+    pick.innerHTML = '<option value="">名簿の列から選ぶ…</option>';
+    roster.headers.forEach((h, i) => {
+      if (!h) return;
+      const o = document.createElement('option');
+      o.value = h; o.textContent = `${XLSX.utils.encode_col(i)}：${h}`;
+      pick.appendChild(o);
+    });
+    pick.addEventListener('change', () => {
+      if (!pick.value) return;
+      f.src = `{${norm(pick.value)}}`; src.value = f.src;
+      pick.value = ''; renderFields(); renderInputPanel(); autosave();
+    });
+    addRow('', pick);
+  }
+  const help = document.createElement('p');
+  help.className = 'sub';
+  help.textContent = f.type === 'text'
+    ? '{列名} が名簿の値に置き換わります。{生号2}{生年} のように並べることもできます。'
+    : '指定した列に何か入っている人だけ、印が付きます。';
+  panelLayout.appendChild(help);
+
+  const kind = document.createElement('select');
+  kind.innerHTML = `<option value="">共通（どの申請書にも）</option>
+    <option value="gun">銃の申請書だけ（第1種・第2種とも）</option>
+    <option value="gun1">第1種銃の申請書だけ</option>
+    <option value="gun2">第2種銃の申請書だけ</option>
+    <option value="trap">わなの申請書だけ</option>
+    <option value="net">網の申請書だけ</option>`;
+  kind.value = f.kind || '';
+  kind.addEventListener('change', () => { f.kind = kind.value; renderFields(); renderInputPanel(); autosave(); });
+  addRow('対象', kind);
+
+  const bold = document.createElement('input');
+  bold.type = 'checkbox'; bold.checked = !!f.bold;
+  bold.addEventListener('change', () => { f.bold = bold.checked; renderFields(); autosave(); });
+  if (f.type === 'circle') {
+    addRow('幅（%）', num('w', 0.5, 0.5, 100));
+    addRow('高さ（%）', num('h', 0.5, 0.5, 100));
+    addRow('太字（線を太く）', bold);
+  } else {
+    addRow('文字サイズ（pt）', num('size', 0.5, 4));
+    addRow('太字', bold);
+    if (f.type === 'text') {
+      addRow('文字間隔（字）', num('spacing', 0.1, -0.5));
+      addRow('行間（倍）', num('lineHeight', 0.1, 0.8));
+      const font = document.createElement('select');
+      fontOptions(font, f.font || 'mincho');
+      font.addEventListener('change', () => { f.font = font.value; renderFields(); autosave(); });
+      addRow('書体', font);
+      const vert = document.createElement('input');
+      vert.type = 'checkbox'; vert.checked = f.vertical;
+      vert.addEventListener('change', () => { f.vertical = vert.checked; renderFields(); autosave(); });
+      addRow('縦書き', vert);
+    }
+  }
+  // 回転（項目の中心を軸に、時計回りが＋）
+  const rot = num('rotate', 1, -360);
+  rot.addEventListener('input', () => { f.rotTL = true; });
+  addRow('回転（度）', rot);
+  const rotBtns = document.createElement('div');
+  rotBtns.className = 'row-btns';
+  [['↺ 90°', -90], ['↻ 90°', 90], ['0°に戻す', null]].forEach(([label, d]) => {
+    const b = document.createElement('button');
+    b.className = 'btn'; b.textContent = label;
+    b.addEventListener('click', () => { rotateFields([f], d); rot.value = f.rotate || 0; });
+    rotBtns.appendChild(b);
+  });
+  addRow('', rotBtns);
+  const acts = document.createElement('div');
+  acts.className = 'actions';
+  const dup = document.createElement('button');
+  dup.className = 'btn'; dup.textContent = '複製';
+  dup.title = 'Ctrl+D でも複製できます';
+  dup.addEventListener('click', () => duplicateSelection(0.01));
+  const del = document.createElement('button');
+  del.className = 'btn danger'; del.textContent = 'この項目を削除';
+  del.addEventListener('click', removeSelected);
+  acts.append(dup, del);
+  panelLayout.appendChild(acts);
+}
+
+/* ---------- 差し込み印刷 ---------- */
+async function printSelected() {
+  if (!roster || !roster.selected.size || !pages.length) return;
+  const people = [...roster.selected].sort((a, b) => a - b).map((i) => roster.rows[i]);
+  const jobs = people.flatMap((person) => jobsFor(person).map((kind) => ({ person, kind })));
+  if (!jobs.length) { toast('印刷する申請書がありません（登録の印がありません）'); return; }
+  const area = $('#printArea');
+  area.innerHTML = '';
+  toast(`申請書${jobs.length}枚分を準備中…`);
+  const bgs = pages.map((p) => p.canvas.toDataURL('image/jpeg', 0.92));
+  const imgs = [];
+  for (const { person, kind } of jobs) {
+    pages.forEach((p, pi) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'page';
+      wrap.style.aspectRatio = p.ratio;
+      wrap.style.setProperty('--u', p.u);
+      const img = document.createElement('img');
+      img.src = bgs[pi];
+      imgs.push(img);
+      const layer = document.createElement('div');
+      layer.className = 'layer';
+      for (const f of state.fields) {
+        if (f.page !== pi) continue;
+        const el = buildFieldEl(f, fieldValue(f, person, kind), false);
+        if (el) layer.appendChild(el);
+      }
+      wrap.append(img, layer);
+      area.appendChild(wrap);
+    });
+  }
+  await Promise.all(imgs.map((img) => img.decode().catch(() => {})));
+  document.body.classList.add('merge');
+  window.print();
+}
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('merge');
+  $('#printArea').innerHTML = '';
+});
+
+/* ---------- 位置揃え ---------- */
+// ページ上の見た目の位置（ページに対する割合）
+function boxOf(f) {
+  const el = viewer.querySelector(`.field[data-id="${f.id}"]`);
+  const pr = pages[f.page].wrap.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  return {
+    top: (r.top - pr.top) / pr.height, left: (r.left - pr.left) / pr.width,
+    h: r.height / pr.height, w: r.width / pr.width,
+  };
+}
+
+// 選んだ項目が縦に並んでいるか（中心のばらつきが横より縦に大きい）
+function isColumn(boxes) {
+  const cx = boxes.map((b) => b.left + b.w / 2), cy = boxes.map((b) => b.top + b.h / 2);
+  const range = (a) => Math.max(...a) - Math.min(...a);
+  const pg = pages[0];
+  // 割合を mm 相当にそろえて比べる
+  return range(cy) * pg.hPt > range(cx) * pg.wPt;
+}
+
+function align(mode, gapMm) {
+  const items = selection.map(byId).filter(Boolean);
+  const anchor = items[0];
+  const same = items.filter((f) => f.page === anchor.page);
+  if (same.length < items.length) toast('基準と別のページの項目は動かしません');
+  const a = boxOf(anchor);
+  const list = same.map((f) => ({ f, b: boxOf(f) }));
+
+  if (mode === 'auto') mode = isColumn(list.map((x) => x.b)) ? 'center' : 'middle';
+
+  if (mode === 'spread' || mode === 'vspread') {
+    // 両端の項目はそのままで、中心の間隔をそろえる
+    const v = mode === 'vspread';
+    const c = ({ b }) => v ? b.top + b.h / 2 : b.left + b.w / 2;
+    const sorted = list.sort((p, q) => c(p) - c(q));
+    const first = c(sorted[0]), last = c(sorted[sorted.length - 1]);
+    sorted.forEach((x, i) => {
+      const d = first + (last - first) * i / (sorted.length - 1) - c(x);
+      if (v) x.f.y += d; else x.f.x += d;
+    });
+  } else if (mode === 'packX' || mode === 'packY') {
+    // 基準から順に、指定した mm の間隔で並べる（並び順は今の位置の順）
+    const v = mode === 'packY';
+    const pg = pages[anchor.page];
+    const unit = (v ? pg.hPt : pg.wPt) * PT_MM;   // ページの縦・横の長さ（mm）
+    const gap = (gapMm || 0) / unit;
+    const sorted = list.sort((p, q) => v ? p.b.top - q.b.top : p.b.left - q.b.left);
+    let pos = v ? sorted[0].b.top : sorted[0].b.left;
+    for (const { f, b } of sorted) {
+      if (v) { f.y += pos - b.top; pos += b.h + gap; } else { f.x += pos - b.left; pos += b.w + gap; }
+    }
+  } else if (mode === 'size') {
+    // 基準と同じ大きさに（文字は pt、○は幅・高さ）
+    for (const { f } of list) {
+      if (f === anchor) continue;
+      if (f.type === 'circle' && anchor.type === 'circle') { f.w = anchor.w; f.h = anchor.h; }
+      else if (f.type !== 'circle' && anchor.type !== 'circle') f.size = anchor.size;
+    }
+  } else {
+    for (const { f, b } of list) {
+      if (f === anchor) continue;
+      if (mode === 'top') f.y += a.top - b.top;
+      if (mode === 'middle') f.y += (a.top + a.h / 2) - (b.top + b.h / 2);
+      if (mode === 'bottom') f.y += (a.top + a.h) - (b.top + b.h);
+      if (mode === 'left') f.x += a.left - b.left;
+      if (mode === 'center') f.x += (a.left + a.w / 2) - (b.left + b.w / 2);
+      if (mode === 'right') f.x += (a.left + a.w) - (b.left + b.w);
+    }
+  }
+  renderFields(); autosave();
+}
+
+// d 度だけ回す（null なら回転なしに戻す）。-180〜180 の範囲で持つ
+function rotateFields(fields, d) {
+  for (const f of fields) {
+    f.rotTL = true;
+    if (d == null) { f.rotate = 0; continue; }
+    let r = ((f.rotate || 0) + d) % 360;
+    if (r > 180) r -= 360;
+    if (r <= -180) r += 360;
+    f.rotate = r;
+  }
+  renderFields(); autosave();
+}
+
+function renderAlignPanel() {
+  const anchor = byId(selection[0]);
+  panelLayout.innerHTML = '';
+  const p = document.createElement('p');
+  p.className = 'hint';
+  p.innerHTML = `${selection.length}個を選択中<br>基準：<b></b>（オレンジの枠・最初に選んだ項目）<br>
+    ほかの項目を基準に合わせます。`;
+  p.querySelector('b').textContent = anchor.label;
+  const body = document.createElement('div');
+  let grid;
+  const section = (title) => {
+    const t = document.createElement('div');
+    t.className = 'group-title'; t.textContent = title;
+    grid = document.createElement('div');
+    grid.className = 'align-grid';
+    body.append(t, grid);
+  };
+  const btn = (label, title, fn) => {
+    const b = document.createElement('button');
+    b.className = 'btn'; b.textContent = label; b.title = title;
+    b.addEventListener('click', fn);
+    grid.appendChild(b);
+    return b;
+  };
+  const mk = (label, mode, title) => btn(label, title, () => align(mode));
+
+  section('おまかせ');
+  const auto = mk('中央で揃える（並びに合わせて）', 'auto',
+    '横に並んでいれば上下の中央、縦に並んでいれば左右の中央を、基準に合わせる');
+  auto.style.gridColumn = '1 / -1';
+
+  section('横一列（高さを揃える）');
+  mk('上下の中央', 'middle', '上下の中心を基準に合わせる');
+  mk('上', 'top', '上端を基準に合わせる');
+  mk('下', 'bottom', '下端を基準に合わせる');
+
+  section('縦一列（左右を揃える）');
+  mk('左右の中央', 'center', '左右の中心を基準に合わせる');
+  mk('左', 'left', '左端を基準に合わせる');
+  mk('右', 'right', '右端を基準に合わせる');
+
+  section('間隔');
+  const few = selection.length < 3;
+  mk('横に等間隔', 'spread', '両端の項目はそのままで、間を等間隔にする（3つ以上）').disabled = few;
+  mk('縦に等間隔', 'vspread', '上下の端の項目はそのままで、間を等間隔にする（3つ以上）').disabled = few;
+  const gap = document.createElement('input');
+  gap.type = 'number'; gap.step = 0.5; gap.min = 0; gap.value = 2;
+  gap.title = '項目と項目のすき間（mm）';
+  const gapRow = document.createElement('label');
+  gapRow.className = 'gap-row';
+  gapRow.append('すき間', gap, 'mm で');
+  gapRow.style.gridColumn = '1 / -1';
+  grid.appendChild(gapRow);
+  btn('横に並べる', '左の項目から順に、すき間をあけて横に並べる', () => align('packX', parseFloat(gap.value)));
+  btn('縦に並べる', '上の項目から順に、すき間をあけて縦に並べる', () => align('packY', parseFloat(gap.value)));
+
+  section('そのほか');
+  mk('大きさを基準に揃える', 'size', '文字は文字サイズ、○は幅と高さを基準と同じにする');
+  // まとめて回転（それぞれの項目の中心で回す）
+  [['↺ 90°', -90], ['↻ 90°', 90], ['回転を0°に', null]].forEach(([label, d]) => {
+    btn(label, 'それぞれの項目をその場で回転', () => rotateFields(selection.map(byId).filter(Boolean), d));
+  });
+  const acts = document.createElement('div');
+  acts.className = 'actions';
+  const del = document.createElement('button');
+  del.className = 'btn danger'; del.textContent = `${selection.length}個を削除`;
+  del.addEventListener('click', removeSelected);
+  const dup = document.createElement('button');
+  dup.className = 'btn'; dup.textContent = `${selection.length}個を複製`;
+  dup.title = 'Ctrl+D でも複製できます';
+  dup.addEventListener('click', () => duplicateSelection(0.01));
+  acts.append(dup, del);
+  panelLayout.append(p, body, acts);
+}
+
+/* ---------- 選択・操作 ---------- */
+
+function toggleSelect(id) {
+  if (selection.includes(id)) selection = selection.filter((s) => s !== id);
+  else selection.push(id);
+  selectedId = selection[selection.length - 1] || null;
+  renderFields(); renderLayoutPanel(); renderInputPanel();
+  if (selection.length > 1) setTab('layout');
+}
+
+function select(id, opts = {}) {
+  selectedId = id;
+  selection = id ? [id] : [];
+  renderFields();
+  renderLayoutPanel();
+  if (!opts.keepPanel) renderInputPanel();
+  else panelInput.querySelectorAll('.row').forEach((r) => r.classList.toggle('sel', r.dataset.id === id));
+  if (opts.scroll) {
+    const el = viewer.querySelector(`.field[data-id="${id}"]`);
+    if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+}
+
+// 選択中の項目を複製し、複製したほうを選択する（基準の順番も引き継ぐ）
+function duplicateSelection(offset = 0) {
+  const copies = selection.map(byId).filter(Boolean).map((f) => ({
+    ...f, id: uid(), label: f.label + '（コピー）', x: f.x + offset, y: f.y + offset,
+  }));
+  state.fields.push(...copies);
+  selection = copies.map((c) => c.id);
+  selectedId = selection[selection.length - 1] || null;
+  autosave(); renderAll();
+  return copies;
+}
+
+function removeSelected() {
+  if (!selection.length) return;
+  state.fields = state.fields.filter((f) => !selection.includes(f.id));
+  selectedId = null; selection = [];
+  autosave(); renderAll();
+}
+
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('active', b.dataset.tool === t));
+  viewer.classList.toggle('adding', t !== 'select');
+}
+
+function setTab(t) {
+  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+  panelInput.hidden = t !== 'input';
+  panelRoster.hidden = t !== 'roster';
+  panelLayout.hidden = t !== 'layout';
+  panelBg.hidden = t !== 'bg';
+}
+
+// 別のページの上で離した項目を、そのページへ移す
+function moveToDroppedPage(group) {
+  let moved = false;
+  const rects = pages.map((p) => p.wrap.getBoundingClientRect());
+  for (const m of group) {
+    const r = m.el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const to = rects.findIndex((pr) => cx >= pr.left && cx <= pr.right && cy >= pr.top && cy <= pr.bottom);
+    if (to < 0 || to === m.g.page) continue;
+    // 見た目の中心が同じ場所に来るように（回転した項目でもずれないように）
+    // dx, dy：書き始めの位置から見た目の中心までの距離（大きさと回転で決まる）
+    const from = rects[m.g.page];
+    const dx = cx - (from.left + m.g.x * from.width), dy = cy - (from.top + m.g.y * from.height);
+    m.g.page = to;
+    m.g.x = (cx - dx - rects[to].left) / rects[to].width;
+    m.g.y = (cy - dy - rects[to].top) / rects[to].height;
+    moved = true;
+  }
+  return moved;
+}
+
+function onPointerDown(e) {
+  const wrap = e.currentTarget;
+  const rect = wrap.getBoundingClientRect();
+  const fieldEl = e.target.closest('.field');
+
+  if (fieldEl && tool === 'select') {
+    let f = byId(fieldEl.dataset.id);
+    if (e.shiftKey) { toggleSelect(f.id); e.preventDefault(); return; }
+    // Ctrl：動かさずに離せば選択の切り替え、ドラッグすれば複製して移動
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl && !selection.includes(f.id)) select(f.id);
+    let el = viewer.querySelector(`.field[data-id="${f.id}"]`);   // 選択で描き直された後の要素
+    const resizing = !ctrl && e.target.classList.contains('handle');
+    const start = { x: e.clientX, y: e.clientY, fw: f.w, fh: f.h };
+    let group = null;
+    const grab = () => selection.map((id) => ({
+      g: byId(id), el: viewer.querySelector(`.field[data-id="${id}"]`), fx: byId(id).x, fy: byId(id).y,
+    }));
+    if (!ctrl) group = grab();   // 複数選択中は、選んだ項目をまとめて動かす
+    const target = wrap;          // 複製すると要素が作り直されるので、ページ側でポインターを受ける
+    target.setPointerCapture(e.pointerId);
+    wrap.style.zIndex = 5;        // ドラッグ中は次のページより手前に出す
+    let duplicated = false;
+    const move = (ev) => {
+      if (!group) {
+        if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 4) return;
+        if (!selection.includes(f.id)) select(f.id);
+        const idx = selection.indexOf(f.id);
+        const copies = duplicateSelection(0);
+        duplicated = true;
+        f = copies[idx];
+        el = viewer.querySelector(`.field[data-id="${f.id}"]`);
+        group = grab();
+      }
+      const dx = (ev.clientX - start.x) / rect.width;
+      const dy = (ev.clientY - start.y) / rect.height;
+      if (resizing) {
+        f.w = Math.max(0.005, start.fw + dx); f.h = Math.max(0.005, start.fh + dy);
+        el.style.width = f.w * 100 + '%'; el.style.height = f.h * 100 + '%';
+      } else {
+        for (const m of group) {
+          m.g.x = m.fx + dx; m.g.y = m.fy + dy;
+          m.el.style.left = m.g.x * 100 + '%'; m.el.style.top = m.g.y * 100 + '%';
+        }
+      }
+    };
+    const up = () => {
+      target.removeEventListener('pointermove', move);
+      target.removeEventListener('pointerup', up);
+      wrap.style.zIndex = '';
+      if (!group) { toggleSelect(f.id); return; }   // Ctrl+クリック
+      const moved = !resizing && moveToDroppedPage(group);
+      if (duplicated) { hist.tag = 'ctrl-drag'; hist.time = Date.now(); }  // 複製と移動を1回分に
+      autosave(duplicated ? 'ctrl-drag' : undefined);
+      if (moved) renderAll(); else renderLayoutPanel();
+    };
+    target.addEventListener('pointermove', move);
+    target.addEventListener('pointerup', up);
+    e.preventDefault();
+    return;
+  }
+
+  if (tool !== 'select') {
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const page = +wrap.dataset.page;
+    const n = state.fields.length + 1;
+    let f;
+    if (tool === 'circle') {
+      f = { id: uid(), page, type: 'circle', label: '丸' + n, value: true, src: '', kind: '', bold: true, x: x - 0.03, y: y - 0.012, w: 0.06, h: 0.024 };
+    } else {
+      const size = tool === 'check' ? 12 : 10.5;
+      f = { id: uid(), page, type: tool, label: (tool === 'check' ? 'チェック' : '文字') + n, src: '', kind: '',
+            value: tool === 'check', x, y: y - 0.006, size, spacing: 0, vertical: false, font: 'mincho',
+            bold: true, lineHeight: 1.2 };
+    }
+    state.fields.push(f);
+    autosave();
+    setTool('select');
+    select(f.id);
+    if (f.type === 'text') { setTab('input'); $('#in-' + f.id)?.focus(); }
+    e.preventDefault();
+    return;
+  }
+
+  startMarquee(e);   // 空いている所からドラッグ：範囲で選ぶ（動かさずに離せば選択の解除）
+}
+
+/* ---------- ドラッグで範囲を選ぶ ---------- */
+// 空いている所からドラッグすると四角が出て、四角にかかった項目を選ぶ。
+// Shift か Ctrl を押しながらだと、いまの選択に足す
+function startMarquee(e) {
+  if (e.button !== 0) return;
+  const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+  const base = additive ? [...selection] : [];
+  const x0 = e.clientX, y0 = e.clientY;
+  const box = document.createElement('div');
+  box.className = 'marquee';
+  let moved = false, hitIds = [];
+  const hits = (l, t, r, b) => [...viewer.querySelectorAll('.field')].filter((el) => {
+    const q = el.getBoundingClientRect();
+    return q.right >= l && q.left <= r && q.bottom >= t && q.top <= b;
+  }).map((el) => el.dataset.id);
+  const move = (ev) => {
+    if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
+    if (!moved) { moved = true; document.body.appendChild(box); }
+    const l = Math.min(x0, ev.clientX), t = Math.min(y0, ev.clientY);
+    const r = Math.max(x0, ev.clientX), b = Math.max(y0, ev.clientY);
+    Object.assign(box.style, { left: l + 'px', top: t + 'px', width: (r - l) + 'px', height: (b - t) + 'px' });
+    hitIds = hits(l, t, r, b);
+    viewer.querySelectorAll('.field').forEach((el) => el.classList.toggle('marquee-hit', hitIds.includes(el.dataset.id)));
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    box.remove();
+    if (!moved) { if (!additive && selection.length) select(null); return; }
+    // 選ぶ順（位置揃えの基準＝先頭）は、ページ順・上から・左から
+    const found = state.fields.filter((f) => hitIds.includes(f.id) && !base.includes(f.id))
+      .sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x).map((f) => f.id);
+    selection = [...base, ...found];
+    selectedId = selection[selection.length - 1] || null;
+    renderFields(); renderLayoutPanel(); renderInputPanel();
+    if (selection.length > 1) setTab('layout');
+    if (found.length) toast(`${selection.length}個を選びました`);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  e.preventDefault();
+}
+
+// 書類の外側（灰色の所）からも範囲を選べるようにする
+viewer.addEventListener('pointerdown', (e) => {
+  if (e.target === viewer && tool === 'select' && pages.length) startMarquee(e);
+});
+
+viewer.addEventListener('dblclick', (e) => {
+  const fieldEl = e.target.closest('.field');
+  if (!fieldEl) return;
+  setTab('input');
+  const input = $('#in-' + fieldEl.dataset.id);
+  if (input) { input.scrollIntoView({ block: 'center' }); input.focus(); }
+});
+
+document.addEventListener('keydown', (e) => {
+  const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+  if (typing) return;   // 入力欄の中では、ブラウザ標準の元に戻すを使う
+  const key = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && (key === 'y' || (key === 'z' && e.shiftKey))) { redo(); e.preventDefault(); return; }
+  if ((e.ctrlKey || e.metaKey) && key === 'z') { undo(); e.preventDefault(); return; }
+  if (!selection.length) return;
+  const step = e.shiftKey ? 0.01 : 0.001;
+  const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+    duplicateSelection(0.01); e.preventDefault();
+  } else if (moves[e.key]) {
+    for (const f of selection.map(byId)) { f.x += moves[e.key][0]; f.y += moves[e.key][1]; }
+    renderFields(); autosave('nudge'); e.preventDefault();
+  } else if (e.key === 'Delete' || e.key === 'Backspace') {
+    removeSelected(); e.preventDefault();
+  } else if (e.key === 'Escape') {
+    select(null);
+  }
+});
+
+/* ---------- ツールバー ---------- */
+$('#pdfInput').addEventListener('change', async (e) => { const fs = [...e.target.files]; e.target.value = ''; await openBackground(fs); });
+$('#rosterInput').addEventListener('change', (e) => { openRoster(e.target.files[0]); e.target.value = ''; });
+document.querySelectorAll('.tool').forEach((b) => b.addEventListener('click', () => {
+  if (!pages.length) { toast('先に背景（PDF・画像）を開いてください'); return; }
+  setTool(b.dataset.tool);
+}));
+document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
+// 表示の倍率（50〜300%、5%ずつ）
+// mx, my：拡大・縮小の基準にする位置（書類の画面の中での位置）。省略すると画面の真ん中。
+// 基準の位置にあった所が、拡大・縮小のあとも同じ位置に見えるように、スクロールも合わせる
+function setZoom(v, mx, my) {
+  v = Math.min(300, Math.max(50, Math.round(v / 5) * 5));
+  const old = +viewer.style.getPropertyValue('--zoom') || +$('#zoom').value || 100;
+  if (mx == null) { mx = viewer.clientWidth / 2; my = viewer.clientHeight / 2; }
+  const px = mx + viewer.scrollLeft, py = my + viewer.scrollTop;
+  $('#zoom').value = v;
+  viewer.style.setProperty('--zoom', v);
+  $('#zoomVal').textContent = v + '%';
+  const k = v / old;
+  viewer.scrollLeft = px * k - mx;
+  viewer.scrollTop = py * k - my;
+}
+$('#zoom').addEventListener('input', (e) => setZoom(+e.target.value));
+$('#zoomOut').addEventListener('click', () => setZoom(+$('#zoom').value - 5));
+$('#zoomIn').addEventListener('click', () => setZoom(+$('#zoom').value + 5));
+$('#zoomVal').addEventListener('click', () => setZoom(100));
+
+// ツールバーの「表示」の所にマウスがあるときは、ホイールだけで倍率を変える
+let zoomAcc = 0;
+document.querySelector('.zoom').addEventListener('wheel', (e) => {
+  e.preventDefault();
+  zoomAcc += e.deltaY;
+  if (Math.abs(zoomAcc) < 40) return;
+  setZoom(+$('#zoom').value + (zoomAcc < 0 ? 5 : -5));
+  zoomAcc = 0;
+}, { passive: false });
+
+// Ctrl＋ホイールで倍率を変える（マウスの位置を中心に。ふつうのホイールは上下に動かすまま）
+let wheelAcc = 0;
+viewer.addEventListener('wheel', (e) => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();   // ブラウザ全体の拡大を止める
+  wheelAcc += e.deltaY;
+  if (Math.abs(wheelAcc) < 40) return;   // タッチパッドの細かい動きはためてから
+  const step = wheelAcc < 0 ? 5 : -5;
+  wheelAcc = 0;
+  const rect = viewer.getBoundingClientRect();
+  setZoom(+$('#zoom').value + step, e.clientX - rect.left, e.clientY - rect.top);   // マウスの位置を基準に
+}, { passive: false });
+$('#noBg').addEventListener('change', (e) => {
+  document.body.classList.toggle('nobg', e.target.checked);
+  $('#noBgBtn').setAttribute('aria-pressed', String(e.target.checked));
+  applyPrintAdj();
+});
+$('#noBgBtn').addEventListener('click', () => {
+  $('#noBg').checked = !$('#noBg').checked;
+  $('#noBg').dispatchEvent(new Event('change'));
+});
+$('#undoBtn').addEventListener('click', undo);
+$('#redoBtn').addEventListener('click', redo);
+// 名簿を開いていないときの印刷（印刷タブのボタンから）：表示中の書類をそのまま1部
+function printCurrent() {
+  if (!pages.length) { toast('先に背景（PDF・画像）を開いてください'); return; }
+  select(null); window.print();
+}
+
+
+/* ---------- 配置ファイル ---------- */
+// 保存先を選べるブラウザ（Chrome・Edge）では保存ダイアログを使い、前回のフォルダを覚えておく
+const TPL_TYPES = [{ description: '様式', accept: { 'application/json': ['.json'] } }];
+let tplHandle = null;
+
+// 配置ファイルの中身：欄の配置・手入力の文字・✓○・向き＋背景（埋め込み）＋使う名簿の名前
+// 名簿の中身（個人情報）は入れない
+function buildSetJson() {
+  return JSON.stringify({
+    app: '書類入力', version: 2,
+    fileName: state.fileName, rotate: state.rotate || 0, printKind,
+    fields: state.fields.map((f) => ({ ...f })),
+    background: state.bg || null,
+    roster: state.rosterRef || null,
+  });
+}
+
+async function writeTo(handle, json) {
+  if (handle.requestPermission && (await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
+    if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') throw new Error('許可されませんでした');
+  }
+  const w = await handle.createWritable();
+  await w.write(json);
+  await w.close();
+}
+
+// 別の名前で保存
+async function saveAs() {
+  if (!state.fields.length && !state.bg) { toast('保存する配置がありません'); return; }
+  const json = buildSetJson();
+  const suggestedName = (state.fileName.replace(/\.(pdf|jpe?g|png|gif|webp|bmp)$/i, '').replace(/ ほか\d+枚$/, '') || '書類') + '_様式.json';
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        id: 'shorui-layout', suggestedName, types: TPL_TYPES, startIn: tplHandle || 'documents',
+      });
+      await writeTo(handle, json);
+      tplHandle = handle;
+      dirty = false;
+      updateSaveButtons();
+      toast(`「${handle.name}」に保存しました`);
+    } catch (err) {
+      if (err.name !== 'AbortError') toast('保存できませんでした');
+    }
+    return;
+  }
+  // 保存ダイアログが使えないブラウザでは、ダウンロードとして保存
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  a.download = suggestedName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  dirty = false;
+  toast('ダウンロードフォルダに保存しました');
+}
+
+// 保存する（開いた・保存した様式のファイルに上書き）。まだなければ別の名前で保存
+async function saveOver() {
+  if (!tplHandle) return saveAs();
+  try {
+    await writeTo(tplHandle, buildSetJson());
+    dirty = false;
+    toast(`「${tplHandle.name}」に保存しました`);
+  } catch (err) {
+    toast('保存できませんでした。「別の名前で保存」を使ってください');
+  }
+}
+
+function updateSaveButtons() {
+  $('#saveOver').title = tplHandle ? `「${tplHandle.name}」に保存（上書き）` : 'まだ保存先がないので、別の名前で保存します';
+}
+
+$('#saveOver').addEventListener('click', saveOver);
+$('#saveAs').addEventListener('click', saveAs);
+
+// 「新しく作る」：背景・欄をなくして最初から（名簿は開いたまま）
+// 背景・欄・手入力の文字をすべてなくして、まっさらにする（名簿は開いたまま）
+function resetWorkspace() {
+  pendingRosterRef = null;
+  state.fields = []; state.bg = null; state.fileName = ''; state.rotate = 0; printKind = 'each';
+  state.rosterRef = roster ? { fileName: roster.fileName, sheetName: roster.sheetName } : null;
+  pdfDoc = null; pages = []; tplHandle = null;
+  viewer.innerHTML = '';
+  viewer.appendChild(emptyEl);
+  selectedId = null; selection = [];
+  dirty = false; resetHistory(); updateSaveButtons(); hideNotice();
+  updatePageStyle();
+}
+
+$('#newSet').addEventListener('click', () => {
+  if (dirty && (state.fields.length || state.bg)
+    && !confirm('保存していない変更があります。新しく作ると消えます。よいですか？')) return;
+  resetWorkspace();
+  renderAll();
+  setTab('bg');
+  // そのまま背景を選ぶ画面を出す（キャンセルしても、背景タブの「背景を選ぶ」から選べる）
+  toast('新しく作ります。書類のPDFか画像を選んでください');
+  pickBackground();
+});
+
+// 配置ファイルを開く
+async function loadTplFile(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (err) { toast('様式を読めませんでした'); return false; }
+  if (data.background) return openSet(data, file.name);
+  return applyLayoutOnly(data, file.name);
+}
+
+// 背景入りの配置ファイル：背景・欄・向きをそのまま開き、名簿を案内する
+async function openSet(data, name) {
+  if (dirty && (state.fields.length || state.bg)
+    && !confirm('保存していない変更があります。様式を開くと消えます。よいですか？')) return false;
+  state.fields = fillFieldDefaults((data.fields || []).map((f) => ({ ...f, id: uid() })));
+  printKind = kindOf(data);
+  selectedId = null; selection = [];
+  if (!(await setBackground(data.background, { rotate: data.rotate || 0 }))) return false;
+  state.rosterRef = data.roster || (roster ? { fileName: roster.fileName, sheetName: roster.sheetName } : null);
+  dirty = false; resetHistory(); renderAll();
+  toast(`「${name}」を開きました`);
+  offerRoster(data.roster);
+  return true;
+}
+
+// 背景の入っていない様式（背景を選ぶ前に保存したもの）：いったん全部まっさらにしてから欄を読み込み、背景を選んでもらう
+async function applyLayoutOnly(data, name) {
+  if (dirty && (state.fields.length || state.bg)
+    && !confirm('保存していない変更があります。様式を開くと消えます。よいですか？')) return false;
+  resetWorkspace();
+  state.fields = fillFieldDefaults((data.fields || []).map((f) => ({ ...f, id: uid() })));
+  state.rotate = data.rotate || 0;   // 背景を選んだときに、保存したときの向きにする
+  printKind = kindOf(data);
+  if (data.roster) state.rosterRef = data.roster;
+  resetHistory();
+  renderAll();
+  setTab('bg');
+  showNotice('bg', `「${name}」には背景が入っていません。この様式で使う書類のPDFか画像を選んでください。`
+    + (data.fileName ? `（保存したときの背景：${data.fileName}）` : ''), [
+    ['背景を選ぶ', () => pickBackground(state.rotate), true],
+    ['あとで', () => hideNotice('bg')],
+  ]);
+  dirty = true;   // 背景入りで保存し直すまでは「保存していない」扱い
+  toast(`「${name}」を読み込みました。背景を選んでください`);
+  pendingRosterRef = data.roster || null;   // 名簿の案内は、背景を選んだあとに出す
+  return true;
+}
+
+$('#loadTpl').addEventListener('click', async () => {
+  if (!window.showOpenFilePicker) { $('#tplInput').click(); return; }
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      id: 'shorui-layout', types: TPL_TYPES, startIn: tplHandle || 'documents',
+    });
+    if (await loadTplFile(await handle.getFile())) { tplHandle = handle; updateSaveButtons(); }
+  } catch (err) {
+    if (err.name !== 'AbortError') toast('ファイルを開けませんでした');
+  }
+});
+
+// 「背景を開く」：PDF 1つか、画像（複数可）を選ぶ。欄の配置はそのまま
+const BG_TYPES = [{ description: 'PDF・画像', accept: { 'application/pdf': ['.pdf'], 'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'] } }];
+async function pickBackground(rotate) {
+  if (!window.showOpenFilePicker) { $('#pdfInput').click(); return; }
+  try {
+    const hs = await window.showOpenFilePicker({ id: 'shorui-bg', types: BG_TYPES, multiple: true });
+    const files = await Promise.all(hs.map((h) => h.getFile()));
+    const bg = await bgFromFiles(files);
+    if (!bg) { toast('PDFか画像（JPG・PNGなど）を選んでください'); return; }
+    const had = !!state.bg;
+    if (!(await setBackground(bg, rotate != null ? { rotate } : {}))) return;
+    dirty = true;
+    toast((had ? `背景を「${bg.name}」に変えました（欄の配置はそのままです）` : `「${bg.name}」を開きました`)
+      + (setBackground.moved ? `。ページ数が減ったので、${setBackground.moved}個の欄を最後のページに移しました` : ""));
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    // ブラウザの都合で選ぶ画面を自動で出せなかったときは、ボタンで出してもらう
+    if (err.name === 'SecurityError' || err.name === 'NotAllowedError') {
+      showNotice('bg', '書類のPDFか画像を選んでください。', [['背景を選ぶ', () => pickBackground(rotate), true], ['あとで', () => hideNotice('bg')]]);
+      return;
+    }
+    toast('背景を開けませんでした');
+  }
+}
+
+$('#tplInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (file) loadTplFile(file);
+});
+
+/* ---------- 印刷の調整（このブラウザに記憶） ---------- */
+const printAdj = { scale: 100, dx: 0, dy: 0, paper: 'auto', orient: 'portrait' };
+try { Object.assign(printAdj, JSON.parse(localStorage.getItem('shorui-print') || '{}')); } catch (e) {}
+
+// 用紙の大きさ（mm、縦向き）
+const PAPERS = {
+  A3: [297, 420], A4: [210, 297], A5: [148, 210], B4: [257, 364], B5: [182, 257],
+  letter: [215.9, 279.4], hagaki: [100, 148],
+};
+const PT_MM = 25.4 / 72;
+
+function paperSize() {
+  if (printAdj.paper === 'auto' || !PAPERS[printAdj.paper]) {
+    return pages.length ? [pages[0].wPt * PT_MM, pages[0].hPt * PT_MM] : PAPERS.A4;
+  }
+  const [w, h] = PAPERS[printAdj.paper];
+  return printAdj.orient === 'landscape' ? [h, w] : [w, h];
+}
+
+// 用紙に合わせて、書類がはみ出さない大きさで印刷する
+function updatePageStyle() {
+  let el = $('#pageStyle');
+  if (!el) {
+    el = document.createElement('style');
+    el.id = 'pageStyle';
+    document.head.appendChild(el);
+  }
+  const [w, h] = paperSize();
+  const ratio = pages.length ? pages[0].wPt / pages[0].hPt : w / h;
+  const pw = Math.min(w, h * ratio);
+  el.textContent = `@page { size: ${w.toFixed(1)}mm ${h.toFixed(1)}mm; margin: 0; }
+    @media print { .page { width: ${pw.toFixed(2)}mm; } }`;
+}
+
+function applyPrintAdj() {
+  $('#pPaper').value = printAdj.paper;
+  $('#pOrient').value = printAdj.orient;
+  $('#pOrient').disabled = printAdj.paper === 'auto';
+  updatePageStyle();
+  const r = document.documentElement.style;
+  r.setProperty('--ps', printAdj.scale / 100);
+  r.setProperty('--pdx', printAdj.dx + 'mm');
+  r.setProperty('--pdy', printAdj.dy + 'mm');
+  $('#pScale').value = printAdj.scale;
+  $('#pDx').value = printAdj.dx;
+  $('#pDy').value = printAdj.dy;
+  const changed = printAdj.scale !== 100 || printAdj.dx !== 0 || printAdj.dy !== 0;
+  const paperName = printAdj.paper === 'auto' ? '' : $('#pPaper').selectedOptions[0].textContent
+    + (printAdj.orient === 'landscape' ? '横' : '');
+  // ボタンに、ふだんと違う設定を短く出す（例：印刷の設定（B5・背景なし））
+  // （背景なしで印刷は、専用のボタンで オン／オフ がわかるので、ここには出さない）
+  const notes = [paperName, changed ? '調整中' : ''].filter(Boolean);
+  $('#printAdjBtn').textContent = '印刷の設定' + (notes.length ? `（${notes.join('・')}）` : '');
+  $('#printAdjBtn').classList.toggle('changed', notes.length > 0);
+  try { localStorage.setItem('shorui-print', JSON.stringify(printAdj)); } catch (e) {}
+}
+
+[['#pScale', 'scale'], ['#pDx', 'dx'], ['#pDy', 'dy']].forEach(([sel, key]) => {
+  $(sel).addEventListener('input', (e) => {
+    const v = parseFloat(e.target.value);
+    if (!isNaN(v)) { printAdj[key] = v; applyPrintAdj(); }
+  });
+});
+$('#pPaper').addEventListener('change', (e) => { printAdj.paper = e.target.value; applyPrintAdj(); });
+$('#pOrient').addEventListener('change', (e) => { printAdj.orient = e.target.value; applyPrintAdj(); });
+$('#pReset').addEventListener('click', () => { Object.assign(printAdj, { scale: 100, dx: 0, dy: 0 }); applyPrintAdj(); });
+$('#printAdjBtn').addEventListener('click', () => { $('#printBar').hidden = !$('#printBar').hidden; });
+// 「このアプリについて」の窓（Esc キーでも閉じる）
+$('#aboutBtn').addEventListener('click', () => {
+  $('#aboutDlg').showModal();
+  $('#aboutDlg').scrollTop = 0; $('#aboutTitle').focus();   // 題から読めるように、いちばん上を表示する
+});
+$('#aboutClose').addEventListener('click', () => $('#aboutDlg').close());
+$('#aboutDlg').addEventListener('click', (e) => { if (e.target === $('#aboutDlg')) $('#aboutDlg').close(); });   // 窓の外を押しても閉じる
+applyPrintAdj();
+
+// ドラッグ＆ドロップでPDF・名簿を開く
+viewer.addEventListener('dragover', (e) => {
+  if (!e.dataTransfer.types.includes('Files')) return;
+  e.preventDefault(); $('#empty')?.classList.add('drag');
+});
+viewer.addEventListener('dragleave', () => {
+  $('#empty')?.classList.remove('drag');
+});
+viewer.addEventListener('drop', (e) => {
+  e.preventDefault();
+  $('#empty')?.classList.remove('drag');
+  const files = [...e.dataTransfer.files];
+  const bgFiles = files.filter((f) => isPdfFile(f) || isImageFile(f));
+  if (bgFiles.length) openBackground(bgFiles);   // PDF 1つ、または画像（複数なら複数ページ）
+  for (const file of files) {
+    if (/\.xls[xm]?$/i.test(file.name)) openRoster(file);
+    else if (/\.json$/i.test(file.name)) loadTplFile(file).then((ok) => { if (ok) { tplHandle = null; updateSaveButtons(); } });
+  }
+});
+
+// 中央のまとまり（保存・戻す・やり直す・表示）を、画面の真ん中に置く（左右のまとまりに重ならない範囲で）
+function centerUndo() {
+  const box = document.querySelector('.tb-undo');
+  box.style.transform = '';
+  const kids = [...box.children].filter((el) => !el.hidden);
+  const u = kids[0].getBoundingClientRect(), r = kids[kids.length - 1].getBoundingClientRect();
+  const w = r.right - u.left;
+  const left = document.querySelector('.tb-left').getBoundingClientRect();
+  const right = document.querySelector('.tb-right').getBoundingClientRect();
+  const sameRow = Math.abs(right.top - u.top) < 8;
+  const minL = left.right + 24;
+  const maxR = sameRow ? right.left - 16 : document.querySelector('.toolbar').getBoundingClientRect().right - 12;
+  const target = Math.max(minL, Math.min(innerWidth / 2 - w / 2, maxR - w));
+  box.style.transform = `translateX(${Math.round(target - u.left)}px)`;
+}
+window.addEventListener('resize', centerUndo);
+
+// 左のパネルの幅が変わったら、中央のまとまりの位置を合わせ直す
+new ResizeObserver(() => requestAnimationFrame(centerUndo)).observe(document.querySelector('.side'));
+
+renderAll();
+</script>
+</body>
+</html>
