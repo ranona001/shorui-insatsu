@@ -44,6 +44,11 @@ li { margin: 4px 0; }
 code { font-family: "BIZ UDGothic", "MS Gothic", monospace; background: var(--accent-weak); padding: 0 4px; border-radius: 4px; }
 .donate { text-align: center; margin: 12px 0 4px; }
 .donate .btn { min-width: 260px; }
+.shots { display: grid; gap: 16px; }
+figure { margin: 0; }
+figure img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+figcaption { color: var(--muted); font-size: 15px; margin-top: 6px; }
+.hero { margin: 18px 0 0; }
 footer { color: var(--muted); font-size: 14px; text-align: center; margin-top: 28px; }
 footer a, section a:not(.btn) { color: var(--accent); }
 @media (max-width: 600px) {
@@ -66,6 +71,14 @@ footer a, section a:not(.btn) { color: var(--accent); }
 </div>
 <p class="note">「ブラウザで試す」でも、名簿や書類はお使いのパソコンの中だけで扱われます。ふだん使うときは、ダウンロードしてパソコンに置くのがおすすめです。</p>
 
+<figure class="hero"><img src="images/screen-print.webp" width="1600" height="900" alt="アプリの画面。左に名簿の5人が並び、中央の申請書に選んだ人の氏名や住所が差し込まれている"><figcaption>名簿を開くと、左に会員が並び、申請書に名前や住所が差し込まれます（画面はすべて架空のデータです）。</figcaption></figure>
+
+<section>
+<h2>紹介動画（1分40秒）</h2>
+<video controls preload="none" poster="images/intro-poster.webp" width="1920" height="1080" style="width:100%;height:auto;border-radius:8px;background:#000"><source src="videos/intro.mp4" type="video/mp4">お使いのブラウザでは動画を再生できません。<a href="videos/intro.mp4">動画のファイル</a>を開いてください。</video>
+<p class="note">くわしい操作は <a href="videos/howto.mp4">操作説明動画（約6分）</a> と <a href="使い方.html">使い方</a> をご覧ください。</p>
+</section>
+
 <section>
 <h2>できること</h2>
 <ul>
@@ -87,6 +100,14 @@ footer a, section a:not(.btn) { color: var(--accent); }
 </section>
 
 <section>
+<h2>画面のようす</h2>
+<div class="shots">
+  <figure><img src="images/screen-layout.webp" width="1600" height="900" loading="lazy" alt="配置タブの画面。選んだ欄の文字サイズや書体、差し込む名簿の列を変えられる"><figcaption>「配置」タブ：欄ごとに、差し込む名簿の列・文字の大きさ・書体などを決めます。</figcaption></figure>
+  <figure><img src="images/screen-input.webp" width="1600" height="900" loading="lazy" alt="入力タブの画面。名簿から入る欄と、全員共通の手入力の欄が並んでいる"><figcaption>「入力」タブ：名簿から入る欄と、全員共通で手入力する欄を確かめられます。右の名簿の列は、書類へドラッグして欄にできます。</figcaption></figure>
+</div>
+</section>
+
+<section>
 <h2>入っているもの</h2>
 <ul>
   <li>アプリ本体（<code>書類印刷.html</code>）と、見た目を飾らない版（<code>書類印刷_シンプル版.html</code>）</li>
@@ -94,6 +115,12 @@ footer a, section a:not(.btn) { color: var(--accent); }
   <li>会員名簿のひな形（Microsoft 365 / Excel 2021 以降用と、Excel 2019 以前用。架空の記入例入り）</li>
   <li>練習用の架空の申請書（狩猟者登録申請書・狩猟免許更新申請書）と、その様式</li>
 </ul>
+</section>
+
+<section>
+<h2>まわりの方にも紹介してください</h2>
+<p>会議や講習会などで配れる、A4 1枚のチラシ（QR コード付き）を用意しました。</p>
+<p><a class="btn" href="flyer.pdf">チラシ（PDF）をダウンロード</a></p>
 </section>
 
 <section>
