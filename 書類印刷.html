@@ -261,7 +261,13 @@ body { font-size: 15px; }
 #panel-roster[hidden] { display: flex; visibility: hidden; pointer-events: none; }
 #panel-input, #panel-layout, #panel-bg { contain: inline-size; }
 #panel-bg:not([hidden]) { display: flex; flex-direction: column; gap: 10px; }
-#panel-bg > .btn, #panel-bg > .row-btns { align-self: flex-start; }
+#panel-bg > .btn, #panel-bg > .row-btns { align-self: center; }
+#panel-bg > .btn, #panel-bg > .row-btns { width: 70%; }
+#panel-bg > .row-btns { flex-wrap: nowrap; }
+#panel-bg > .row-btns > .btn { flex: 1; }
+/* 背景タブのボタンを見やすく（「名前・種類を自分で設定」と同じ見た目） */
+#panel-bg > .btn:not(.primary):not(:disabled), #panel-bg > .row-btns > .btn:not(:disabled) { padding: 6px 12px; border: 1.5px solid var(--accent); color: var(--accent); background: var(--accent-weak); font-weight: 700; }
+#panel-bg > .btn:not(.primary):not(:disabled):hover, #panel-bg > .row-btns > .btn:not(:disabled):hover { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); filter: brightness(1.04); }
 .row label { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
 /* 入力欄の側（2列目）も幅を決める元にしない。項目名の長さで幅が決まる */
 #panel-input > .row > :nth-child(n+2), #panel-layout > .row > :nth-child(n+2) { contain: inline-size; }
@@ -343,6 +349,32 @@ body.nobg .page canvas, body.nobg .page img { visibility: hidden; }
 #aboutDlg .about-btns { display: flex; justify-content: flex-end; margin-top: 14px; }
 #aboutDlg a { color: var(--accent); }
 #aboutDlg a.btn { display: inline-block; color: #fff; text-decoration: none; padding: 7px 18px; min-width: 240px; text-align: center; }
+/* 「名前・種類を自分で設定」の窓 */
+#colsDlg { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 20px 26px 16px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel); color: var(--text); font-size: 16px; line-height: 1.6; }
+#colsDlg::backdrop { background: rgba(0, 0, 0, .12); }
+#colsDlg h2 { margin: 0 0 4px; font-size: 20px; outline: none; }
+#colsDlg .cols-lead { margin: 0 0 10px; font-size: 14.5px; color: var(--muted); }
+#colsDlg h2, #colsDlg .cols-lead { cursor: move; user-select: none; }
+#colsDlg .cols-grid { display: grid; grid-template-columns: 3.4em 8.5em 3.6em minmax(9em, 1fr) 15em 5.5em; gap: 6px; align-items: center; margin: 6px 0; }
+#colsDlg .cols-head { color: var(--muted); margin-bottom: 0; }
+#colsDlg .cols-head span { font-size: 13px; text-align: center; }
+#colsDlg .cols-grid b { font-size: 14px; }
+#colsDlg .cols-none { font-size: 13px; color: var(--muted); }
+#colsDlg input[type="text"] { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--text); font-size: 15px; }
+#colsDlg input[type="text"]:disabled { opacity: .45; }
+#colsDlg select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--text); font-size: 15px; }
+#colsRows { overflow-x: auto; }
+#colsDlg .cols-part { display: inline-block; margin-right: 1em; }
+#colsDlg .cols-sum { margin: 12px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--accent-weak); font-size: 14.5px; }
+#colsDlg .cols-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+#colsDlg .cols-btns .left { margin-right: auto; }
+.cols-open { display: flex; justify-content: center; }
+#panel-roster .cols-btn { min-width: 70%; padding: 6px 18px; border: 1.5px solid var(--accent); color: var(--accent); background: var(--accent-weak); font-weight: 700; }
+#panel-roster .cols-btn::before { content: "⚙"; margin-right: 6px; font-weight: 400; }
+#panel-roster .cols-btn:not(:disabled):hover { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); filter: brightness(1.04); }
+.cols-warn { contain: inline-size; margin: 6px 0; padding: 6px 10px; border-radius: 6px; background: #fff3d6; color: #4a3600; font-size: 14px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cols-warn { background: #3d3216; color: #f6e3b0; } }
 #aboutDlg .about-donate { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 10px; text-align: center; }
 /* 選んだ道具・タブは青で塗りつぶし、タブの下の線も同じ青にしてパネルとつなげる */
 .tool.active, .tab.active { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
@@ -354,7 +386,7 @@ body.nobg .page canvas, body.nobg .page img { visibility: hidden; }
 .person > .no + span { white-space: nowrap; }
 #panel-roster > .row-btns { flex-wrap: nowrap; }
 #panel-roster > select { contain: inline-size; }
-#panel-roster > .sub:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#panel-roster > .sub:first-child, #panel-bg > .bg-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 右のパネル：アプリは名簿のいちばん長い値に合わせて幅を決める（style 属性）が、220px に固定して、はみ出た文字は … で省く */
 .side-right { box-sizing: border-box; width: 220px !important; min-width: 0; }
 .chip { overflow: hidden; }
@@ -378,6 +410,17 @@ body.nobg .page canvas, body.nobg .page img { visibility: hidden; }
 .tool:not(.active):hover, .tab:not(.active):hover { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .tool.active:hover, .tab.active:hover { filter: brightness(1.1); }
 .person:not(.preview):hover { background: var(--accent-weak); box-shadow: inset 0 0 0 2px var(--accent); }
+/* 一覧で選んだ人を見やすく。チェックなし＝そのまま、チェックあり＝うすい青、表示中＝枠で囲むだけ（ライト・ダークとも） */
+#panel-roster .person, #panel-roster .person.preview { background: transparent; }
+#panel-roster .person:has(input:checked), #panel-roster .person.preview:has(input:checked) { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); }
+#panel-roster .person.preview, #panel-roster .person.preview:hover { box-shadow: inset 0 0 0 3px var(--accent); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) #panel-roster .person, :root:not([data-theme="light"]) #panel-roster .person.preview { background: transparent; }
+  :root:not([data-theme="light"]) #panel-roster .person:has(input:checked), :root:not([data-theme="light"]) #panel-roster .person.preview:has(input:checked) { background: color-mix(in srgb, var(--accent-strong) 30%, var(--panel)); }
+}
+:root[data-theme="dark"] #panel-roster .person, :root[data-theme="dark"] #panel-roster .person.preview { background: transparent; }
+:root[data-theme="dark"] #panel-roster .person:has(input:checked), :root[data-theme="dark"] #panel-roster .person.preview:has(input:checked) { background: color-mix(in srgb, var(--accent-strong) 30%, var(--panel)); }
+#panel-roster .person input { accent-color: var(--accent-strong); }
 .kchip:hover { box-shadow: 0 0 0 2px var(--accent); }
 .chip:hover { box-shadow: inset 0 0 0 1px var(--merge); }
 #zoom { border-radius: 999px; cursor: pointer; }
@@ -622,6 +665,18 @@ input[type=range] { accent-color: var(--accent-strong); }
     <button class="btn" id="aboutBtn" title="個人情報の扱い・ご注意・寄付・使っている部品">このアプリについて</button>
   </div>
 </header>
+<!-- 「名前・種類を自分で設定」の窓 -->
+<dialog id="colsDlg" aria-labelledby="colsTitle">
+  <h2 id="colsTitle" tabindex="-1">名前・種類を自分で設定</h2>
+  <p class="cols-lead">名前と、人ごとに印刷する種類を、名簿のどの列を参照してどう見分けるかを設定できます。種類ごとの呼び方と、左のパネルのボタンの表示（2文字まで）も変えられます。設定は、様式と一緒に保存されます。</p>
+  <div id="colsRows"></div>
+  <p class="cols-sum" id="colsSum"></p>
+  <div class="cols-btns">
+    <button class="btn left" id="colsAuto" title="ひな形の名簿の見出し（氏名・一種登録・わな登録・網登録）と印で見分ける設定に戻す">初期値に戻す</button>
+    <button class="btn" id="colsCancel">やめる</button>
+    <button class="btn primary" id="colsOk">決定</button>
+  </div>
+</dialog>
 <!-- 「このアプリについて」の窓 -->
 <dialog id="aboutDlg" aria-labelledby="aboutTitle">
   <h2 id="aboutTitle" tabindex="-1" autofocus>このアプリについて</h2>
@@ -722,7 +777,7 @@ const panelRoster = $('#panel-roster');
 const panelLayout = $('#panel-layout');
 const panelBg = $('#panel-bg');
 
-let state = { fileName: '', fields: [], bg: null, rosterRef: null };
+let state = { fileName: '', fields: [], bg: null, rosterRef: null, rosterRules: {} };
 let pages = [];          // { wrap, layer, canvas, ratio, u }
 let selectedId = null;
 let selection = [];      // 選択中の項目（先頭が位置揃えの基準）。selectedId は最後に選んだ項目
@@ -823,13 +878,24 @@ function fillFieldDefaults(fields) {
 }
 
 /* ---------- 免許の種類（申請書は種類ごとに1枚） ---------- */
-// 名簿の「一種登録」列：✔なら第1種、2（2️⃣など）なら第2種。「わな登録」「網登録」列：何か入っていれば登録
-const KINDS = {
-  gun1: { name: '第1種銃', short: '銃1' },
-  gun2: { name: '第2種銃', short: '銃2' },
-  trap: { name: 'わな', short: 'わな' },
-  net: { name: '網', short: '網' },
+// 名前と、種類ごとの「呼び方・ボタンの表示・見分ける列・見分け方」は「名前・種類を自分で設定」で変えられる（様式と一緒に保存）
+// 初期値は、ひな形の名簿の見出しと印（一種登録：2 を含めば第2種、それ以外は第1種／わな登録・網登録：何か入っていれば登録）
+const RULE_DEFAULTS = {
+  name: { label: '名前', col: '氏名' },
+  gun1: { label: '第1種銃', short: '銃1', col: '一種登録', cond: 'not', text: '2' },
+  gun2: { label: '第2種銃', short: '銃2', col: '一種登録', cond: 'has', text: '2' },
+  trap: { label: 'わな', short: 'わな', col: 'わな登録', cond: 'any', text: '' },
+  net: { label: '網', short: '網', col: '網登録', cond: 'any', text: '' },
 };
+const CONDS = [['any', '何か入っている'], ['eq', '次の文字と同じ'], ['has', '次の文字を含む'], ['not', '次の文字を含まない']];
+// 設定（していない所は初期値）
+function rule(key) { return { ...RULE_DEFAULTS[key], ...((state.rosterRules || {})[key] || {}) }; }
+const nameLabel = () => rule('name').label || RULE_DEFAULTS.name.label;
+// 種類の呼び方とボタンの表示は、設定から読む
+const KINDS = {};
+for (const k of ['gun1', 'gun2', 'trap', 'net']) {
+  KINDS[k] = { get name() { return rule(k).label || RULE_DEFAULTS[k].label; }, get short() { return rule(k).short || RULE_DEFAULTS[k].short; } };
+}
 let printKind = 'each';   // each：1人1枚／auto：登録している免許ごとに1枚ずつ／gun1／gun2／trap／net（様式に保存する）
 const PRINT_KINDS = ['each', 'auto', 'gun1', 'gun2', 'trap', 'net'];
 const kindOf = (data) => PRINT_KINDS.includes(data.printKind) ? data.printKind : 'each';
@@ -841,14 +907,27 @@ function kindsFor(person) {
   return rosterKinds(person);
 }
 
+// 名簿の列の値（列がなければ空）
+function cellOf(col, person) {
+  if (!col || !roster) return '';
+  const i = colIndex(col);
+  return i < 0 ? '' : String(person[i] ?? '').trim();
+}
+// 見分け方に当てはまるか（文字は空白を除き、全角数字を半角にして比べる）
+function ruleMatches(r, v) {
+  if (v === '') return false;
+  const t = norm(r.text), n = norm(v);
+  if (r.cond === 'has') return n.includes(t);
+  if (r.cond === 'eq') return n === t;
+  if (r.cond === 'not') return !t || !n.includes(t);
+  return true;
+}
+// 種類を見分ける列が、名簿に1つでもあるか
+const hasKindCols = () => roster && Object.keys(KINDS).some((k) => rule(k).col && colIndex(rule(k).col) >= 0);
+
 // 名簿の登録欄から決まる種類
 function rosterKinds(person) {
-  const kinds = [];
-  const gun = norm(evalSrc('{一種登録}', person));
-  if (gun) kinds.push(gun.includes('2') ? 'gun2' : 'gun1');
-  if (evalSrc('{わな登録}', person) !== '') kinds.push('trap');
-  if (evalSrc('{網登録}', person) !== '') kinds.push('net');   // 網の列がない名簿では、いつも空
-  return kinds;
+  return Object.keys(KINDS).filter((k) => { const r = rule(k); return ruleMatches(r, cellOf(r.col, person)); });
 }
 
 // 項目の対象（f.kind）が、印刷する書類の種類（kind）に入るか
@@ -910,13 +989,14 @@ function fieldValue(f, person, kind) {
 
 function findHeaderRow(aoa) {
   for (let r = 0; r < Math.min(10, aoa.length); r++) {
-    if (aoa[r].some((c) => norm(c) === '氏名')) return r;
+    const nm = rule('name').col;
+    if (aoa[r].some((c) => norm(c) === '氏名' || (nm && norm(c) === norm(nm)))) return r;
   }
   return -1;
 }
 
 function pickSheet(wb) {
-  // 「氏名」の見出しがあり、列がいちばん多いシートを選ぶ
+  // 名前の見出し（「氏名」か、設定した列）があり、列がいちばん多いシートを選ぶ
   let best = null, bestCols = -1;
   for (const name of wb.SheetNames) {
     const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: false });
@@ -1088,7 +1168,7 @@ function useSheet(name) {
   const hr = Math.max(0, findHeaderRow(aoa));
   roster.sheetName = name;
   roster.headers = (aoa[hr] || []).map((h) => String(h).trim());
-  const nameCol = roster.headers.findIndex((h) => norm(h) === '氏名');
+  const nameCol = rule('name').col ? colIndex(rule('name').col) : -1;
   roster.rows = aoa.slice(hr + 1).filter((r) => nameCol >= 0 ? String(r[nameCol]).trim() !== '' : r.some((c) => c !== ''));
   roster.nameCol = nameCol;
   roster.noCol = roster.headers.findIndex((h) => /^No\.?$/i.test(norm(h)));
@@ -1209,7 +1289,7 @@ async function openRoster(file, handle, sheetName) {
   toast(`${roster.rows.length}人を読み込みました` + (pages.length && !merged ? '（差し込み設定のある項目がありません）' : ''));
 }
 
-function personName(p) { return roster.nameCol >= 0 ? String(p[roster.nameCol]).trim() : '(名前なし)'; }
+function personName(p) { return roster.nameCol >= 0 ? String(p[roster.nameCol]).trim() : `(${nameLabel()}なし)`; }
 // 申請書の種類を切り替えるボタン（色付き＝印刷する。オレンジの枠＝名簿から手で変えたもの）
 function kindChips(p, onChange) {
   const box = document.createElement('span');
@@ -1291,13 +1371,9 @@ function renderRosterPanel() {
   // 印刷する申請書の種類
   const kindSel = document.createElement('select');
   kindSel.className = 'sheet-select';
-  kindSel.innerHTML = `
-    <option value="each">ほかの書類用（1人1枚）</option>
-    <option value="auto">申請書：免許ごとに1枚ずつ（自動）</option>
-    <option value="gun1">申請書：第1種銃猟だけ</option>
-    <option value="gun2">申請書：第2種銃猟だけ</option>
-    <option value="trap">申請書：わなだけ</option>
-    <option value="net">申請書：網猟だけ</option>`;
+  for (const [v, t] of [['each', 'ほかの書類用（1人1枚）'], ['auto', '申請書：免許ごとに1枚ずつ（自動）'], ...Object.keys(KINDS).map((k) => [k, `申請書：${KINDS[k].name}だけ`])]) {
+    const o = document.createElement('option'); o.value = v; o.textContent = t; kindSel.appendChild(o);
+  }
   kindSel.value = printKind;
   kindSel.addEventListener('change', () => {
     printKind = kindSel.value;
@@ -1358,13 +1434,31 @@ function renderRosterPanel() {
   const note = document.createElement('div');
   note.className = 'sub';
   note.textContent = `${roster.rows.length}人　名前をクリックすると書類に表示します。`
-    + '右のボタン（銃1・銃2・わな・網）で、印刷する申請書を人ごとに切り替えられます。';
+    + `右のボタン（${Object.keys(KINDS).map((k) => KINDS[k].short).join('・')}）で、印刷する申請書を人ごとに切り替えられます。`;
 
   // 名簿のファイル名（別の名簿は右の「差し込み印刷」のパネルから開く）
   const fname = document.createElement('div');
   fname.className = 'sub';
   fname.textContent = '名簿：' + roster.fileName;
-  panelRoster.append(fname, sheetSel, note, btns, list, kindSel, printBtn);
+  // 名前・種類を自分で設定（名前と種類を、名簿のどの列でどう見分けるか）
+  const colsRow = document.createElement('div');
+  colsRow.className = 'cols-open';
+  const colsBtn = document.createElement('button');
+  colsBtn.className = 'btn cols-btn'; colsBtn.textContent = '名前・種類を自分で設定';
+  colsBtn.title = '名前と、人ごとに印刷する種類を、名簿のどの列でどう見分けるかを決める（呼び方・ボタンの表示も変えられます）';
+  colsBtn.addEventListener('click', openColsDlg);
+  colsRow.appendChild(colsBtn);
+  const warns = [];
+  if (roster.nameCol < 0) warns.push(`${nameLabel()}の列が見つかりません。`);
+  if (!hasKindCols() && printKind !== 'each') warns.push(`種類（${Object.keys(KINDS).map((k) => KINDS[k].name).join('・')}）を見分ける列が見つかりません。`);
+  if (warns.length) {
+    const w = document.createElement('div');
+    w.className = 'cols-warn';
+    w.textContent = warns.join('') + '「名前・種類を自分で設定」で選んでください。';
+    panelRoster.append(fname, sheetSel, colsRow, w, note, btns, list, kindSel, printBtn);
+  } else {
+    panelRoster.append(fname, sheetSel, colsRow, note, btns, list, kindSel, printBtn);
+  }
   drawList(); updateCount();
 }
 
@@ -1436,15 +1530,17 @@ function renderColPanel() {
   fillColumnChips(box);
 }
 
-// 左の「背景」タブ：いまの背景・背景の変更・回転
+// 左の「背景」タブ：背景の名前・背景の変更・回転
 function renderBgPanel() {
   panelBg.innerHTML = '';
   const info = document.createElement('div');
   info.className = 'hint';
   if (state.bg) {
+    // 印刷タブの「名簿：」と同じ見た目。長いときは折り返さずに「…」で省略（全体はマウスを載せると出る）
     const kind = state.bg.kind === 'pdf' ? 'PDF' : '画像';
-    info.innerHTML = 'いまの背景：<b></b>';
-    info.querySelector('b').textContent = `${state.bg.name}（${kind}・${pages.length}ページ）`;
+    info.className = 'sub bg-name';
+    info.textContent = `背景：${state.bg.name}（${kind}・${pages.length}ページ）`;
+    info.title = info.textContent;
   } else {
     info.textContent = 'まだ背景がありません。「背景を選ぶ」で、書類のPDFか画像（JPG・PNGなど）を選んでください。';
   }
@@ -2223,12 +2319,9 @@ function renderLayoutPanel() {
   panelLayout.appendChild(help);
 
   const kind = document.createElement('select');
-  kind.innerHTML = `<option value="">共通（どの申請書にも）</option>
-    <option value="gun">銃の申請書だけ（第1種・第2種とも）</option>
-    <option value="gun1">第1種銃の申請書だけ</option>
-    <option value="gun2">第2種銃の申請書だけ</option>
-    <option value="trap">わなの申請書だけ</option>
-    <option value="net">網の申請書だけ</option>`;
+  for (const [v, t] of [['', '共通（どの申請書にも）'], ['gun', `${KINDS.gun1.name}・${KINDS.gun2.name}の申請書だけ（どちらでも）`], ...Object.keys(KINDS).map((k) => [k, `${KINDS[k].name}の申請書だけ`])]) {
+    const o = document.createElement('option'); o.value = v; o.textContent = t; kind.appendChild(o);
+  }
   kind.value = f.kind || '';
   kind.addEventListener('change', () => { f.kind = kind.value; renderFields(); renderInputPanel(); autosave(); });
   addRow('対象', kind);
@@ -2807,6 +2900,7 @@ function buildSetJson() {
     fields: state.fields.map((f) => ({ ...f })),
     background: state.bg || null,
     roster: state.rosterRef || null,
+    rosterRules: state.rosterRules && Object.keys(state.rosterRules).length ? state.rosterRules : undefined,
   });
 }
 
@@ -2872,7 +2966,7 @@ $('#saveAs').addEventListener('click', saveAs);
 // 背景・欄・手入力の文字をすべてなくして、まっさらにする（名簿は開いたまま）
 function resetWorkspace() {
   pendingRosterRef = null;
-  state.fields = []; state.bg = null; state.fileName = ''; state.rotate = 0; printKind = 'each';
+  state.fields = []; state.bg = null; state.fileName = ''; state.rotate = 0; printKind = 'each'; state.rosterRules = {};
   state.rosterRef = roster ? { fileName: roster.fileName, sheetName: roster.sheetName } : null;
   pdfDoc = null; pages = []; tplHandle = null;
   viewer.innerHTML = '';
@@ -2907,6 +3001,7 @@ async function openSet(data, name) {
     && !confirm('保存していない変更があります。様式を開くと消えます。よいですか？')) return false;
   state.fields = fillFieldDefaults((data.fields || []).map((f) => ({ ...f, id: uid() })));
   printKind = kindOf(data);
+  setRosterRules(data.rosterRules);
   selectedId = null; selection = [];
   if (!(await setBackground(data.background, { rotate: data.rotate || 0 }))) return false;
   state.rosterRef = data.roster || (roster ? { fileName: roster.fileName, sheetName: roster.sheetName } : null);
@@ -2924,6 +3019,7 @@ async function applyLayoutOnly(data, name) {
   state.fields = fillFieldDefaults((data.fields || []).map((f) => ({ ...f, id: uid() })));
   state.rotate = data.rotate || 0;   // 背景を選んだときに、保存したときの向きにする
   printKind = kindOf(data);
+  setRosterRules(data.rosterRules);
   if (data.roster) state.rosterRef = data.roster;
   resetHistory();
   renderAll();
@@ -3050,6 +3146,134 @@ $('#pOrient').addEventListener('change', (e) => { printAdj.orient = e.target.val
 $('#pReset').addEventListener('click', () => { Object.assign(printAdj, { scale: 100, dx: 0, dy: 0 }); applyPrintAdj(); });
 $('#printAdjBtn').addEventListener('click', () => { $('#printBar').hidden = !$('#printBar').hidden; });
 // 「このアプリについて」の窓（Esc キーでも閉じる）
+// 名前・種類の設定を変える（名簿を開いていれば、名前の列などを読み直す）
+function setRosterRules(rules) {
+  state.rosterRules = rules && typeof rules === 'object' ? JSON.parse(JSON.stringify(rules)) : {};
+  if (roster && roster.sheetName) useSheet(roster.sheetName);
+}
+
+// 「名前・種類を自分で設定」の窓：名前と種類ごとに、呼び方・ボタンの表示・列・見分け方を決める
+function openColsDlg() {
+  if (!roster) return;
+  const dlg = $('#colsDlg'), box = $('#colsRows');
+  const keys = ['name', ...Object.keys(KINDS)];
+  const tags = { name: '名前', gun1: '種類1', gun2: '種類2', trap: '種類3', net: '種類4' };
+  const two = (v) => [...String(v)].slice(0, 2).join('');
+  const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
+  let draft = {};
+  // 窓で変えた内容は、その場でアプリに反映する（「決定」で確定、「やめる」・Esc・窓の外で元に戻す）
+  const orig = JSON.parse(JSON.stringify(state.rosterRules || {}));
+  let committed = false;
+  const applyLive = (rules) => {
+    const before = rule('name').col ? colIndex(rule('name').col) : -1;
+    state.rosterRules = JSON.parse(JSON.stringify(rules));
+    const after = rule('name').col ? colIndex(rule('name').col) : -1;
+    if (before !== after) useSheet(roster.sheetName);   // 名前の列が変わったときだけ、一覧を作り直す
+    renderAll();
+  };
+  const summary = () => {
+    applyLive(draft);
+    const nameI = rule('name').col ? colIndex(rule('name').col) : -1;
+    const named = nameI < 0 ? 0 : roster.rows.filter((p) => String(p[nameI] ?? '').trim() !== '').length;
+    const n = {}; Object.keys(KINDS).forEach((k) => { n[k] = 0; });
+    for (const p of roster.rows) for (const k of rosterKinds(p)) n[k]++;
+    const head = `この設定で一覧に並ぶ人は ${named}人　／　`, parts = Object.keys(n).map((k) => `【${KINDS[k].name}は ${n[k]}人】`);
+    const sum = $('#colsSum'); sum.textContent = head;
+    for (const t of parts) sum.appendChild(el('span', { className: 'cols-part', textContent: t }));
+  };
+  const fill = (src) => {
+    box.innerHTML = '';
+    draft = {};
+    const head = el('div', { className: 'cols-grid cols-head' });
+    for (const t of ['', '呼び方', 'ボタン名', '名簿の参照列', '見分け方', '判別する文字']) head.appendChild(el('span', { textContent: t }));
+    box.appendChild(head);
+    for (const key of keys) {
+      const r = { ...src(key) };
+      const ci = r.col ? colIndex(r.col) : -1;
+      r.col = ci >= 0 ? roster.headers[ci] : '';
+      draft[key] = r;
+      const row = el('div', { className: 'cols-grid' });
+      row.appendChild(el('b', { textContent: tags[key] }));
+      const label = el('input', { type: 'text', value: r.label, maxLength: 12, placeholder: RULE_DEFAULTS[key].label, title: '呼び方（申請書の種類の名前など）' });
+      label.addEventListener('input', () => { r.label = label.value.trim(); summary(); });
+      row.appendChild(label);
+      if (key === 'name') row.appendChild(el('span', { className: 'cols-none', textContent: '―' }));
+      else {
+        const short = el('input', { type: 'text', value: r.short, maxLength: 2, placeholder: RULE_DEFAULTS[key].short, title: '左のパネルのボタンの表示（2文字まで）' });
+        short.addEventListener('input', () => { r.short = two(short.value.trim()); summary(); });
+        short.addEventListener('change', () => { short.value = r.short; });
+        row.appendChild(short);
+      }
+      const col = el('select', { title: '名簿のどの列を参照して見分けるか' });
+      col.appendChild(el('option', { value: '', textContent: '（使わない）' }));
+      roster.headers.forEach((h, i) => { if (h) col.appendChild(el('option', { value: h, textContent: `${XLSX.utils.encode_col(i)}：${h}` })); });
+      col.value = r.col;
+      col.addEventListener('change', () => { r.col = col.value; summary(); });
+      row.appendChild(col);
+      if (key === 'name') { const t = el('span', { className: 'cols-none', textContent: 'この列に入力がある人を一覧に並べます' }); t.style.gridColumn = 'span 2'; row.appendChild(t); }
+      else {
+        const cond = el('select', { title: '見分け方' });
+        for (const [v, t] of CONDS) cond.appendChild(el('option', { value: v, textContent: t }));
+        cond.value = r.cond;
+        const text = el('input', { type: 'text', value: r.text, maxLength: 10, placeholder: '例：✔', title: '判別に使う文字' });
+        const sync = () => { text.disabled = cond.value === 'any'; };
+        cond.addEventListener('change', () => { r.cond = cond.value; sync(); summary(); });
+        text.addEventListener('input', () => { r.text = text.value; summary(); });
+        sync();
+        row.append(cond, text);
+      }
+      box.appendChild(row);
+    }
+    summary();
+  };
+  fill(rule);
+  $('#colsAuto').onclick = () => fill((k) => RULE_DEFAULTS[k]);
+  // 決定しないで閉じるとき（やめる・窓の外・Esc）は、開く前の設定に戻す
+  const revert = () => { if (!committed) { committed = true; applyLive(orig); } };
+  dlg.cancelEdit = () => { revert(); dlg.close(); };
+  $('#colsCancel').onclick = dlg.cancelEdit;
+  dlg.oncancel = revert;
+  $('#colsOk').onclick = () => {
+    // 空の呼び方・ボタンは初期値に戻す
+    for (const key of keys) {
+      const r = draft[key];
+      if (!r.label) r.label = RULE_DEFAULTS[key].label;
+      if (key !== 'name' && !r.short) r.short = RULE_DEFAULTS[key].short;
+    }
+    // 初期値と同じ設定なら、何も保存しない（ひな形の見出しのまま）
+    const same = keys.every((key) => {
+      const d = RULE_DEFAULTS[key], r = draft[key];
+      const di = d.col ? colIndex(d.col) : -1, ri = r.col ? colIndex(r.col) : -1;
+      return di === ri && r.label === d.label && (key === 'name' || (r.short === d.short && r.cond === d.cond && (r.cond === 'any' || norm(r.text) === norm(d.text))));
+    });
+    committed = true;
+    applyLive(same ? {} : draft);
+    if (state.fields.length || state.bg) dirty = true;   // 様式と一緒に保存する
+    dlg.close();
+    toast(same ? '名前・種類の設定を初期値に戻しました' : '名前・種類の設定を変えました（様式を保存すると、一緒に保存されます）');
+  };
+  dlg.onclose = revert;   // 念のため（ほかの方法で閉じられたとき）
+  for (const k of ['margin', 'left', 'top', 'right', 'bottom']) dlg.style[k] = '';   // 開くたびに画面の真ん中から
+  dlg.showModal();
+  $('#colsTitle').focus();
+}
+$('#colsDlg').addEventListener('click', (e) => { if (e.target === $('#colsDlg')) $('#colsDlg').cancelEdit(); });
+// 窓の題と説明文をつかんでドラッグすると、窓を動かせる（画面の外へははみ出さない）
+$('#colsDlg').addEventListener('pointerdown', (e) => {
+  const dlg = $('#colsDlg');
+  if (e.button !== 0 || !e.target.closest('h2, .cols-lead')) return;
+  const r = dlg.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+  Object.assign(dlg.style, { margin: '0', left: r.left + 'px', top: r.top + 'px', right: 'auto', bottom: 'auto' });
+  const move = (ev) => {
+    const x = Math.min(Math.max(ev.clientX - dx, 0), innerWidth - r.width);
+    const y = Math.min(Math.max(ev.clientY - dy, 0), innerHeight - r.height);
+    dlg.style.left = Math.max(0, x) + 'px'; dlg.style.top = Math.max(0, y) + 'px';
+  };
+  const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); };
+  addEventListener('pointermove', move); addEventListener('pointerup', up);
+  e.preventDefault();
+});
+
 $('#aboutBtn').addEventListener('click', () => {
   $('#aboutDlg').showModal();
   $('#aboutDlg').scrollTop = 0; $('#aboutTitle').focus();   // 題から読めるように、いちばん上を表示する
