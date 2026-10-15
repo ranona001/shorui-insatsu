@@ -385,6 +385,28 @@ body { font-size: 15px; }
 /* 位置揃え */
 .align-grid .btn { font-size: 14px; }
 .gap-row { font-size: 14px; color: var(--text); }
+/* 連番（名簿の列とは別の機能なので、色と形を変える） */
+.col-hint { margin-bottom: 0; }
+.col-hint + .chips { margin-top: -4px; }   /* 説明文と札（連番を付ける・名簿の列）の隙間は狭く */
+.serial-card { flex-shrink: 0; padding: 3px 6px 4px; border: 2px dashed var(--accent); border-radius: 8px; background: var(--accent-weak);
+  cursor: grab; text-align: center; margin-bottom: 2px; }
+.row.serialf label::before { content: "連番"; font-size: 10px; color: #fff; background: var(--accent-strong); border-radius: 3px; padding: 1px 4px; margin-right: 4px; }
+#panel-layout .row.serial-edit { display: grid; grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr); gap: 2px 6px; align-items: center; margin: 12px 0 10px; }
+.serial-edit-head { font-size: 14.5px; font-weight: 600; color: var(--text); text-align: center; }
+#panel-layout .serial-edit input { min-width: 0; width: 100%; box-sizing: border-box; }
+.serial-mid { align-self: stretch; display: flex; align-items: center; justify-content: center; padding: 0 10px; border: 1.5px dashed var(--accent); border-radius: 6px; background: var(--accent-weak);
+  color: var(--accent); font-weight: 700; font-size: 15px; text-align: center; white-space: nowrap; min-width: 3.2em; }
+.serial-card:hover { border-style: solid; }
+.serial-card b { display: block; color: var(--accent); font-size: 14.5px; font-weight: 700; line-height: 1.35; }
+.serial-card span { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.serial-row { padding: 5px 8px 3px; border: 1.5px dashed var(--accent); border-radius: 8px; background: var(--accent-weak); }
+.cols-open + .serial-row { margin-top: -4px; }   /* 「名前・種類を自分で設定」との隙間は狭く */
+#panel-roster > .serial-row { margin-bottom: -4px; }   /* 下の文との隙間も、上と同じく狭く */
+.serial-row .sub { margin: 3px 0 0; text-align: center; line-height: 1.3; }
+.serial-line b { color: var(--accent); }
+.serial-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+.serial-line input { width: 5.5em; }
+.serial-line select { width: auto; }
 /* 印刷の設定 */
 .printbar { font-size: 15px; }
 .printbar input, .printbar select { padding: 6px 8px; }
@@ -409,6 +431,13 @@ body { font-size: 15px; }
 body.nobg .page canvas, body.nobg .page img { visibility: hidden; }
 
 /* ---- 見やすさの調整 ---- */
+/* ボタン・入力欄の枠をはっきりさせる（--ctl-line：操作できる部品の枠の色。色に意味のあるボタンは変えない） */
+:root { --ctl-line: #8b96a3; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ctl-line: #6c7786; } }
+.btn:not(.primary):not(:disabled):not(.changed):not([aria-pressed="true"]),
+.row input[type=text], .row input[type=number], .row select, .row textarea, .search, .sheet-select, .rich,
+.printbar input, .printbar select, .gap-row input, #colsDlg input[type="text"], #colsDlg select { border-color: var(--ctl-line); }
+.btn:not(.primary):not(:disabled):not(.changed):not([aria-pressed="true"]):hover { border-color: var(--accent); }
 /* 「このアプリについて」の窓 */
 #aboutDlg { width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 20px 26px 16px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--panel); color: var(--text); font-size: 16px; line-height: 1.65; }
@@ -534,6 +563,7 @@ body.nobg .page canvas, body.nobg .page img { visibility: hidden; }
   --field: #f9fafb;
   --hover: #e1e6ed;
   --line: #cbd3dc;
+  --ctl-line: #9aa5b2;      /* ボタン・入力欄の枠（--line より濃く、操作できる部品とわかるように。太さは変えない） */
   --text: #1c2632;
   --muted: #4b5765;
   --accent: #2b5bd1;
@@ -548,7 +578,7 @@ body.nobg .page canvas, body.nobg .page img { visibility: hidden; }
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #111418; --panel: #1a1e24; --raised: #232831; --field: #20252c; --hover: #2a3039; --line: #363e49;
+    --bg: #111418; --panel: #1a1e24; --raised: #232831; --field: #20252c; --hover: #2a3039; --line: #363e49; --ctl-line: #5f6a78;
     --text: #e9edf1; --muted: #bcc5cf;
     --accent: #93b4ff; --accent-strong: #3b6be0; --accent-weak: #22324f;
     --merge: #64d6a2; --merge-strong: #1b7f57;
@@ -560,8 +590,8 @@ body { font-family: "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", system-ui, sans-s
 
 /* ---- ボタン ---- */
 .btn, .tool, .tab { transition: background-color .12s, border-color .12s, box-shadow .12s, color .12s; }
-.btn { border-radius: 8px; border-color: transparent; background: var(--raised); box-shadow: var(--shadow-1); }
-.btn:not(:disabled):hover { background: var(--hover); border-color: transparent; box-shadow: var(--shadow-2); }
+.btn { border-radius: 8px; border-color: var(--ctl-line); background: var(--raised); box-shadow: var(--shadow-1); }
+.btn:not(:disabled):hover { background: var(--hover); border-color: var(--accent); box-shadow: var(--shadow-2); }
 .btn:not(:disabled):active { transform: translateY(1px); box-shadow: var(--shadow-1); }
 .btn.primary { box-shadow: 0 2px 8px rgba(43, 91, 209, .35); }
 .btn.primary:not(:disabled):hover { box-shadow: 0 4px 14px rgba(43, 91, 209, .45); }
@@ -591,7 +621,7 @@ body { font-family: "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", system-ui, sans-s
 /* ---- ツールバー ---- */
 .toolbar { background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: 0 1px 0 rgba(255, 255, 255, .4) inset, 0 2px 8px rgba(16, 24, 40, .06); position: relative; z-index: 2; }
 .sep { background: var(--line); height: 26px; }
-.zoom .btn, .zoom .zbtn { box-shadow: none; background: transparent; border: 1px solid var(--line); }
+.zoom .btn, .zoom .zbtn { box-shadow: none; background: transparent; border: 1px solid var(--ctl-line); }
 .zoom .btn:not(:disabled):hover { background: var(--hover); }
 #zoomVal { font-variant-numeric: tabular-nums; }
 .chk input { accent-color: var(--accent-strong); }
@@ -625,7 +655,7 @@ input[type=range] { accent-color: var(--accent-strong); }
 .row.sel { background: var(--accent-weak); box-shadow: inset 3px 0 0 var(--accent); }
 .row input[type=text], .row input[type=number], .row select, .row textarea, .search, .sheet-select, .rich,
 .printbar input, .printbar select, .gap-row input {
-  border-radius: 8px; border-color: var(--line); background: var(--field); transition: border-color .12s, box-shadow .12s;
+  border-radius: 8px; border-color: var(--ctl-line); background: var(--field); transition: border-color .12s, box-shadow .12s;
 }
 .row input:focus, .row select:focus, .row textarea:focus, .sheet-select:focus, .printbar input:focus, .printbar select:focus, .gap-row input:focus {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak);
@@ -756,7 +786,7 @@ input[type=range] { accent-color: var(--accent-strong); }
 <!-- 「このアプリについて」の窓 -->
 <dialog id="aboutDlg" aria-labelledby="aboutTitle">
   <h2 id="aboutTitle" tabindex="-1" autofocus>このアプリについて</h2>
-  <p class="about-name">書類印刷（汎用版）　版 0.3（2026年10月）</p>
+  <p class="about-name">書類印刷（汎用版）　版 0.4（2026年10月）</p>
   <h3>できること</h3>
   <p>書類の PDF や画像を背景にして、名簿（Excel）の内容を差し込んで印刷します。くわしい使い方は、アプリと同じ場所の <a href="使い方.html" target="_blank">使い方.html</a> をご覧ください。</p>
   <h3>個人情報について</h3>
@@ -1033,7 +1063,7 @@ const panelRoster = $('#panel-roster');
 const panelLayout = $('#panel-layout');
 const panelBg = $('#panel-bg');
 
-let state = { fileName: '', fields: [], bg: null, rosterRef: null, rosterRules: {} };
+let state = { fileName: '', fields: [], bg: null, rosterRef: null, rosterRules: {}, serial: { start: 1, digits: 3, per: 'person' } };
 let pages = [];          // { wrap, layer, canvas, ratio, u }
 let selectedId = null;
 let selection = [];      // 選択中の項目（先頭が位置揃えの基準）。selectedId は最後に選んだ項目
@@ -1156,6 +1186,113 @@ let printKind = 'each';   // each：1人1枚／auto：登録している免許�
 const PRINT_KINDS = ['each', 'auto', 'gun1', 'gun2', 'trap', 'net'];
 const kindOf = (data) => PRINT_KINDS.includes(data.printKind) ? data.printKind : 'each';
 
+/* ---------- 連番（印刷するたびに振る番号。様式に保存） ---------- */
+// 連番の欄は、欄そのものに印（f.serial = true）を持つ。前後の文字は f.pre・f.post（例：第 001 号）。
+// 差し込み（{列名}）とはまったく別の扱いなので、名簿にどんな名前の列があってもぶつからない
+const SERIAL_TYPE = 'application/x-shorui-serial';   // 右のパネルの「連番」の札をドラッグしたときの印
+const SERIAL_DEFAULTS = { start: 1, digits: 3, per: 'person' };   // per：person＝人ごと（1人に1つ）／sheet＝1枚ごと
+const SERIAL_DIGITS = [[1, '1桁（1）'], [2, '2桁（01）'], [3, '3桁（001）'], [4, '4桁（0001）'], [5, '5桁'], [6, '6桁'], [7, '7桁'], [8, '8桁']];   // 足りない桁は 0 で埋める
+let serialNow = null;       // 印刷の準備中だけ、いま作っている1枚の番号が入る
+let pendingSerial = null;   // 印刷したあとに「印刷できましたか？」と聞くための番号
+function setSerial(v) {
+  state.serial = { ...SERIAL_DEFAULTS };
+  if (v && typeof v === 'object') {
+    if (Number.isInteger(+v.start) && +v.start >= 0) state.serial.start = +v.start;
+    if (SERIAL_DIGITS.some(([d]) => d === +v.digits)) state.serial.digits = +v.digits;
+    if (v.per === 'sheet') state.serial.per = 'sheet';
+  }
+}
+const serialText = (n) => String(n).padStart(state.serial.digits, '0');
+const isSerial = (f) => f.type === 'text' && !!f.serial;
+const hasSerialField = () => state.fields.some(isSerial);
+// 欄に入る連番の文字（印刷しない人は空）
+function serialValue(f) {
+  const n = serialNow ?? previewSerial();
+  return n == null ? '' : (f.pre || '') + serialText(n) + (f.post || '');
+}
+const serialForSave = () => (Object.keys(SERIAL_DEFAULTS).every((k) => state.serial[k] === SERIAL_DEFAULTS[k]) ? undefined : { ...state.serial });
+// 選んだ人を印刷するときの1枚ずつの並びと番号（名簿の並び順。人ごとなら、同じ人の何枚かは同じ番号）
+function printJobs() {
+  const people = [...roster.selected].sort((a, b) => a - b).map((i) => roster.rows[i]);
+  const jobs = [];
+  let n = state.serial.start;
+  for (const person of people) {
+    const kinds = jobsFor(person);
+    for (const kind of kinds) { jobs.push({ person, kind, no: n }); if (state.serial.per === 'sheet') n++; }
+    if (state.serial.per === 'person' && kinds.length) n++;
+  }
+  return jobs;
+}
+// 表示中の人の番号（印刷しない人は null）。名簿がないときは開始の番号
+function previewSerial() {
+  const p = roster && previewPerson();
+  if (!p) return state.serial.start;
+  const kind = previewKind();
+  const j = printJobs().find((x) => x.person === p && (printKind !== 'auto' || x.kind === kind));
+  return j ? j.no : null;
+}
+// 連番の設定を変えたとき（様式と一緒に保存するので「保存していない」扱いにする）
+function changeSerial() {
+  if (state.fields.length || state.bg) dirty = true;
+  renderFields(); renderPreviewBar(); updateSerialRange();
+  const card = colPanel.querySelector('.serial-card span'); if (card) card.textContent = serialCardText();
+}
+// 番号の範囲の文（short：右のパネルの札用）
+function serialRangeText(short) {
+  if (!roster) return short ? serialText(state.serial.start) : `印刷すると ${serialText(state.serial.start)} になります`;
+  const jobs = printJobs();
+  if (!jobs.length) return short ? `${serialText(state.serial.start)}〜` : '印刷する人を選ぶと、番号の範囲が出ます';
+  const a = serialText(jobs[0].no), b = serialText(jobs[jobs.length - 1].no);
+  return short ? (a === b ? a : `${a}〜${b}`) : `この印刷では ${a === b ? a : a + '〜' + b} になります`;
+}
+function updateSerialRange() { const el = $('#serialRange'); if (el) el.textContent = serialRangeText(false); }
+// 印刷タブの連番の設定（様式に {連番} の欄があるときだけ出す）
+function serialRow() {
+  const box = document.createElement('div');
+  box.className = 'serial-row';
+  const line = document.createElement('div');
+  line.className = 'serial-line';
+  const head = document.createElement('b'); head.textContent = '連番';
+  const start = document.createElement('input');
+  start.type = 'number'; start.min = 0; start.step = 1; start.value = state.serial.start; start.title = '最初の番号';
+  start.addEventListener('input', () => {
+    const v = parseInt(start.value, 10);
+    if (Number.isInteger(v) && v >= 0) { state.serial.start = v; changeSerial(); }
+  });
+  const from = document.createElement('span'); from.textContent = 'から';
+  const digits = document.createElement('select'); digits.title = '番号の桁（足りない桁は 0 で埋める）';
+  for (const [v, t] of SERIAL_DIGITS) { const o = document.createElement('option'); o.value = v; o.textContent = t; digits.appendChild(o); }
+  digits.value = state.serial.digits;
+  digits.addEventListener('change', () => { state.serial.digits = +digits.value; changeSerial(); });
+  line.append(head, start, from, digits);
+  if (roster) {
+    const per = document.createElement('select'); per.title = '番号の数え方';
+    for (const [v, t] of [['person', '人ごと'], ['sheet', '1枚ごと']]) { const o = document.createElement('option'); o.value = v; o.textContent = t; per.appendChild(o); }
+    per.value = state.serial.per;
+    per.addEventListener('change', () => { state.serial.per = per.value; changeSerial(); });
+    line.append(per);
+  }
+  const range = document.createElement('div');
+  range.className = 'sub'; range.id = 'serialRange'; range.textContent = serialRangeText(false);
+  box.append(line, range);
+  box.title = '人ごと：1人に1つの番号（本紙と控えなどは同じ番号）／1枚ごと：印刷する1枚ずつ別の番号';
+  return box;
+}
+// 印刷したあとに、続きの番号を覚えるか聞く（印刷画面で「キャンセル」されたかはアプリからわからないため）
+function askSerialNext() {
+  const ps = pendingSerial; pendingSerial = null;
+  if (!ps) return;
+  const range = ps.first === ps.last ? serialText(ps.first) : `${serialText(ps.first)}〜${serialText(ps.last)}`;
+  showNotice('serial', `連番 ${range} で印刷しました。印刷できましたか？`, [
+    [`はい（次は ${serialText(ps.next)} から）`, () => {
+      state.serial.start = ps.next; hideNotice('serial');
+      changeSerial(); renderRosterPanel();
+      toast(`次の連番は ${serialText(ps.next)} からです（様式を保存すると、番号も保存されます）`);
+    }, true],
+    [`いいえ（${serialText(state.serial.start)} のまま）`, () => hideNotice('serial')],
+  ]);
+}
+
 // その人の申請書の種類。名簿タブで手で切り替えていればそちら（画面を閉じると消える）
 function kindsFor(person) {
   const o = roster && roster.override && roster.override.get(person);
@@ -1238,6 +1375,7 @@ function previewPerson() {
 // person を渡すと名簿の値、なければ手入力の値。kind が違う項目は空
 function fieldValue(f, person, kind) {
   if (!kindMatches(f.kind, kind)) return f.type === 'text' ? '' : false;
+  if (isSerial(f)) return serialValue(f);   // 連番は名簿がなくても入る
   if (f.src && person) {
     const v = evalSrc(f.src, person);
     return f.type === 'text' ? v : v !== '';
@@ -1593,7 +1731,8 @@ function renderRosterPanel() {
     b.disabled = !pages.length;
     b.title = pages.length ? '表示中の書類を印刷' : '先に様式か背景を開いてください';
     b.addEventListener('click', printCurrent);
-    panelRoster.append(h, b);
+    if (hasSerialField()) panelRoster.append(h, serialRow(), b);
+    else panelRoster.append(h, b);
     return;
   }
   // シート選択
@@ -1647,6 +1786,7 @@ function renderRosterPanel() {
     printBtn.textContent = `選んだ人を印刷（${people.length}人・${sheets}部）`;
     printBtn.title = none ? `種類の印がない${none}人は印刷されません` : '';
     printBtn.disabled = sheets === 0 || !pages.length;
+    updateSerialRange();
   };
 
   const drawList = () => {
@@ -1714,9 +1854,9 @@ function renderRosterPanel() {
     const w = document.createElement('div');
     w.className = 'cols-warn';
     w.textContent = warns.join('') + '「名前・種類を自分で設定」で選んでください。';
-    panelRoster.append(fname, sheetSel, colsRow, w, note, btns, list, kindSel, printBtn);
+    panelRoster.append(fname, sheetSel, colsRow, ...(hasSerialField() ? [serialRow()] : []), w, note, btns, list, kindSel, printBtn);
   } else {
-    panelRoster.append(fname, sheetSel, colsRow, note, btns, list, kindSel, printBtn);
+    panelRoster.append(fname, sheetSel, colsRow, ...(hasSerialField() ? [serialRow()] : []), note, btns, list, kindSel, printBtn);
   }
   drawList(); updateCount();
 }
@@ -1775,13 +1915,19 @@ function renderColPanel() {
   colPanel.append(head, file, rosterOpenButton(!roster));
   if (!roster) {
     const hint = document.createElement('p');
-    hint.className = 'sub';
+    hint.className = 'sub col-hint';
     hint.textContent = '名簿を開くと、ここに名簿の列（氏名・住所など）が並びます。書類へドラッグすると、その列を差し込む欄になります。';
     colPanel.appendChild(hint);
+    if (pages.length) {   // 連番は名簿がなくても使える
+      const box = document.createElement('div');
+      box.className = 'chips';
+      box.appendChild(serialChip());
+      colPanel.appendChild(box);
+    }
     return;
   }
   const hint = document.createElement('p');
-  hint.className = 'sub';
+  hint.className = 'sub col-hint';
   hint.textContent = '書類へドラッグして配置。既存の欄に重ねると、その欄の差し込みを入れ替えます。';
   const box = document.createElement('div');
   box.className = 'chips';
@@ -1827,10 +1973,29 @@ function renderBgPanel() {
   panelBg.append(info, change, rotTitle, rot, note);
 }
 
+// 右のパネルの「連番を付ける」の札（名簿の列とは別の機能。書類へドラッグすると連番の欄になる）
+const serialCardText = () => `書類へドラッグ ${serialRangeText(true)}`;
+function serialChip() {
+  const chip = document.createElement('div');
+  chip.className = 'serial-card';
+  chip.draggable = true;
+  const b = document.createElement('b'); b.textContent = '＃ 連番を付ける';
+  const v = document.createElement('span'); v.textContent = serialCardText();
+  chip.append(b, v);
+  chip.title = '書類へドラッグすると連番の欄になります。番号の設定は、左の「印刷」と「配置」タブで決めます';
+  chip.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData(SERIAL_TYPE, '1');
+    e.dataTransfer.setData('text/plain', '連番');
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  return chip;
+}
+
 function fillColumnChips(box) {
   box.innerHTML = '';
   const p = previewPerson();
   const q = norm(colFilter);
+  if (!q) box.appendChild(serialChip());   // いちばん上に「連番を付ける」（名簿の列とは色と形を変えている）
   roster.headers.forEach((h, i) => {
     if (!h || (q && !norm(h).includes(q))) return;
     const chip = document.createElement('div');
@@ -1855,7 +2020,7 @@ function fillColumnChips(box) {
 // 名簿の列を書類に落としたとき
 const COL_TYPE = 'application/x-shorui-col';
 function onColumnDragOver(e) {
-  if (!e.dataTransfer.types.includes(COL_TYPE)) return;
+  if (!e.dataTransfer.types.includes(COL_TYPE) && !e.dataTransfer.types.includes(SERIAL_TYPE)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
   const over = e.target.closest('.field');
@@ -1864,8 +2029,9 @@ function onColumnDragOver(e) {
 }
 
 function onColumnDrop(e) {
-  const col = e.dataTransfer.getData(COL_TYPE);
-  if (!col) return;
+  const serial = e.dataTransfer.types.includes(SERIAL_TYPE);
+  const col = serial ? '' : e.dataTransfer.getData(COL_TYPE);
+  if (!col && !serial) return;
   e.preventDefault();
   e.stopPropagation();
   viewer.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
@@ -1876,11 +2042,12 @@ function onColumnDrop(e) {
   let f;
   if (fieldEl) {
     f = byId(fieldEl.dataset.id);
-    f.src = src;
-    toast(`「${f.label}」に名簿の「${col}」を差し込みます`);
+    if (serial && f.type !== 'text') { toast('連番は文字の欄にだけ入れられます'); return; }
+    if (serial) { f.serial = true; f.src = ''; toast(`「${f.label}」を連番の欄にしました（最初の番号や桁は「印刷」タブで決めます）`); }
+    else { f.src = src; f.serial = false; toast(`「${f.label}」に名簿の「${col}」を差し込みます`); }
   } else {
     f = {
-      id: uid(), page: +wrap.dataset.page, type: 'text', label: col, value: '', src, kind: '',
+      id: uid(), page: +wrap.dataset.page, type: 'text', label: serial ? '連番' : col, value: '', src: serial ? '' : src, kind: '', ...(serial ? { serial: true, pre: '', post: '' } : {}),
       x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height - 0.006,
       size: 10.5, spacing: 0, vertical: false, font: 'mincho', bold: true, lineHeight: 1.2,
     };
@@ -1888,6 +2055,7 @@ function onColumnDrop(e) {
   }
   autosave();
   select(f.id);
+  if (serial) renderRosterPanel();
 }
 
 function renderPreviewBar() {
@@ -1903,6 +2071,7 @@ function renderPreviewBar() {
   if (printKind === 'auto' && kinds.length > 1) {
     what += `（ほかに${kinds.slice(1).map((k) => KINDS[k].name).join('・')}でも印刷されます）`;
   }
+  if (hasSerialField()) { const n = previewSerial(); what += n == null ? '　／ 連番：印刷しない人' : `　／ 連番 ${serialText(n)}`; }
   bar.textContent = `表示中：${personName(p)} さん　${what}`;
   viewer.prepend(bar);
 }
@@ -2239,9 +2408,9 @@ function renderInputPanel() {
       g.textContent = `${f.page + 1}ページ目`;
       panelInput.appendChild(g);
     }
-    const merged = !!f.src;
+    const merged = !!f.src || isSerial(f);
     const row = document.createElement('div');
-    row.className = 'row' + (selection.includes(f.id) ? ' sel' : '') + (merged ? ' merged' : '');
+    row.className = 'row' + (selection.includes(f.id) ? ' sel' : '') + (isSerial(f) ? ' serialf' : merged ? ' merged' : '');
     row.dataset.id = f.id;
     const lab = document.createElement('label');
     lab.textContent = f.label;
@@ -2257,8 +2426,8 @@ function renderInputPanel() {
       input = document.createElement('textarea');
       input.readOnly = true;
       input.className = 'merged';
-      input.value = person ? fieldValue(f, person, kind) : '';
-      input.placeholder = f.src;
+      input.value = person || isSerial(f) ? fieldValue(f, person, kind) : '';
+      input.placeholder = isSerial(f) ? '（印刷しない人）' : f.src;
       input.rows = Math.max(1, input.value.split('\n').length);
     } else {
       input = document.createElement('input');
@@ -2548,13 +2717,40 @@ function renderLayoutPanel() {
   name.addEventListener('change', renderInputPanel);
   addRow('項目名', name);
 
+  // 連番の欄：前後の文字と、連番をやめるボタン（差し込みの欄は出さない）
+  if (isSerial(f)) {
+    const sideInput = (key, ph) => {
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.value = f[key] || ''; inp.placeholder = ph;
+      inp.addEventListener('input', () => { f[key] = inp.value; renderFields(); renderInputPanel(); autosave('serial-' + key); });
+      return inp;
+    };
+    // 「前の文字｜連番｜後の文字」の見出しを1行に並べ、その下に入力欄（第 001 号 の並びがそのまま見える）
+    const box = document.createElement('div');
+    box.className = 'row serial-edit';   // .row：ほかの入力欄と同じ見た目にする（並べ方だけ下の CSS で3列に）
+    for (const t of ['前の文字', '連番', '後の文字']) { const h = document.createElement('span'); h.className = 'serial-edit-head'; h.textContent = t; box.appendChild(h); }
+    const mid = document.createElement('div');
+    mid.className = 'serial-mid';
+    const n = serialNow ?? previewSerial();
+    mid.textContent = serialText(n == null ? state.serial.start : n);
+    mid.title = '印刷するたびに振る番号（いま表示している人の番号）。最初の番号・桁・数え方は「印刷」タブで決めます';
+    box.append(sideInput('pre', '例：第'), mid, sideInput('post', '例：号'));
+    panelLayout.appendChild(box);
+  }
   // 差し込み
   const src = document.createElement('input');
   src.type = 'text'; src.value = f.src || ''; src.placeholder = '例：{氏名}　空欄なら手入力';
   src.addEventListener('input', () => { f.src = src.value; renderFields(); autosave('src'); });
   src.addEventListener('change', renderInputPanel);
-  addRow('差し込み', src);
-  if (roster) {
+  if (!isSerial(f)) addRow('差し込み', src);
+  if (f.type === 'text' && !isSerial(f)) {
+    const on = document.createElement('button');
+    on.className = 'btn'; on.textContent = '＃ この欄を連番にする';
+    on.title = '印刷するたびに振る番号（001、002…）を入れる欄にします（名簿の列とは別の機能です）';
+    on.addEventListener('click', () => { f.serial = true; f.src = ''; f.pre = f.pre || ''; f.post = f.post || ''; autosave(); renderAll(); });
+    addRow('', on);
+  }
+  if (roster && !isSerial(f)) {
     const pick = document.createElement('select');
     pick.innerHTML = '<option value="">名簿の列から選ぶ…</option>';
     roster.headers.forEach((h, i) => {
@@ -2572,6 +2768,7 @@ function renderLayoutPanel() {
   }
   const help = document.createElement('p');
   help.className = 'sub';
+  help.hidden = isSerial(f);
   help.textContent = f.type === 'text'
     ? '{列名} が名簿の値に置き換わります。{生号2}{生年} のように並べることもできます。'
     : '指定した列に何か入っている人だけ、印が付きます。';
@@ -2637,15 +2834,15 @@ function renderLayoutPanel() {
 /* ---------- 差し込み印刷 ---------- */
 async function printSelected() {
   if (!roster || !roster.selected.size || !pages.length) return;
-  const people = [...roster.selected].sort((a, b) => a - b).map((i) => roster.rows[i]);
-  const jobs = people.flatMap((person) => jobsFor(person).map((kind) => ({ person, kind })));
+  const jobs = printJobs();
   if (!jobs.length) { toast('印刷するものがありません（種類の印がありません）'); return; }
   const area = $('#printArea');
   area.innerHTML = '';
   toast(`${jobs.length}枚分を準備中…`);
   const bgs = pages.map((p) => p.canvas.toDataURL('image/jpeg', 0.92));
   const imgs = [];
-  for (const { person, kind } of jobs) {
+  for (const { person, kind, no } of jobs) {
+    serialNow = no;
     pages.forEach((p, pi) => {
       const wrap = document.createElement('div');
       wrap.className = 'page';
@@ -2665,6 +2862,8 @@ async function printSelected() {
       area.appendChild(wrap);
     });
   }
+  serialNow = null;
+  if (hasSerialField()) pendingSerial = { first: jobs[0].no, last: jobs[jobs.length - 1].no, next: jobs[jobs.length - 1].no + 1 };
   await Promise.all(imgs.map((img) => img.decode().catch(() => {})));
   document.body.classList.add('merge');
   window.print();
@@ -2672,6 +2871,7 @@ async function printSelected() {
 window.addEventListener('afterprint', () => {
   document.body.classList.remove('merge');
   $('#printArea').innerHTML = '';
+  askSerialNext();
 });
 
 /* ---------- 位置揃え ---------- */
@@ -3141,7 +3341,9 @@ $('#redoBtn').addEventListener('click', redo);
 // 名簿を開いていないときの印刷（印刷タブのボタンから）：表示中の書類をそのまま1部
 function printCurrent() {
   if (!pages.length) { toast('先に背景（PDF・画像）を開いてください'); return; }
-  select(null); window.print();
+  select(null);
+  if (hasSerialField()) pendingSerial = { first: state.serial.start, last: state.serial.start, next: state.serial.start + 1 };
+  window.print();
 }
 
 
@@ -3161,6 +3363,7 @@ function buildSetJson() {
     roster: state.rosterRef || null,
     rosterRules: state.rosterRules && Object.keys(state.rosterRules).length ? state.rosterRules : undefined,
     printAdj: printAdjForSave(),
+    serial: serialForSave(),
   });
 }
 
@@ -3228,6 +3431,7 @@ function resetWorkspace() {
   pendingRosterRef = null;
   state.fields = []; state.bg = null; state.fileName = ''; state.rotate = 0; printKind = 'each'; state.rosterRules = {};
   setPrintAdj(null);
+  setSerial(null);
   state.rosterRef = roster ? { fileName: roster.fileName, sheetName: roster.sheetName } : null;
   pdfDoc = null; pages = []; tplHandle = null;
   viewer.innerHTML = '';
@@ -3266,6 +3470,7 @@ async function openSet(data, name) {
   selectedId = null; selection = [];
   if (!(await setBackground(data.background, { rotate: data.rotate || 0 }))) return false;
   setPrintAdj(data.printAdj || legacyPrintAdj);
+  setSerial(data.serial);
   state.rosterRef = data.roster || (roster ? { fileName: roster.fileName, sheetName: roster.sheetName } : null);
   dirty = false; resetHistory(); renderAll();
   toast(`「${name}」を開きました`);
@@ -3283,6 +3488,7 @@ async function applyLayoutOnly(data, name) {
   printKind = kindOf(data);
   setRosterRules(data.rosterRules);
   setPrintAdj(data.printAdj || legacyPrintAdj);
+  setSerial(data.serial);
   if (data.roster) state.rosterRef = data.roster;
   resetHistory();
   renderAll();
