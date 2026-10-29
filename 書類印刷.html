@@ -293,7 +293,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* 印刷の調整 */
 .printbar {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;   /* 中身は中央に並べる */
   padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line);
 }
 .printbar[hidden] { display: none; }
@@ -344,7 +344,7 @@ body { font-size: 15px; }
 .row label { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
 /* 入力欄の側（2列目）も幅を決める元にしない。項目名の長さで幅が決まる */
 #panel-input > .row > :nth-child(n+2), #panel-layout > .row > :nth-child(n+2) { contain: inline-size; }
-.printbar .sub { flex-basis: 100%; }
+.printbar .sub { flex-basis: 100%; text-align: center; }
 .zoom, .chk { color: var(--text); }
 .zoom .btn { padding: 4px 10px; }
 .zoom .zbtn { font-weight: 700; min-width: 34px; }
@@ -786,7 +786,7 @@ input[type=range] { accent-color: var(--accent-strong); }
 <!-- 「このアプリについて」の窓 -->
 <dialog id="aboutDlg" aria-labelledby="aboutTitle">
   <h2 id="aboutTitle" tabindex="-1" autofocus>このアプリについて</h2>
-  <p class="about-name">書類印刷（汎用版）　版 0.4（2026年10月）</p>
+  <p class="about-name">書類印刷（汎用版）　版 0.5（2026年10月）</p>
   <h3>できること</h3>
   <p>書類の PDF や画像を背景にして、名簿（Excel）の内容を差し込んで印刷します。くわしい使い方は、アプリと同じ場所の <a href="使い方.html" target="_blank">使い方.html</a> をご覧ください。</p>
   <h3>個人情報について</h3>
